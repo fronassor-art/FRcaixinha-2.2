@@ -1,0 +1,5 @@
+# Preservar integralmente os tres documentos canonicos.
+# Ignorar somente espacos finais nesses documentos.
+docs/requisitos/FRcaixinha_2_2_Contrato_Tecnico_Mestre_FINAL_APROVADO_2026-10-16.md whitespace=-blank-at-eol
+docs/requisitos/FRcaixinha_2_2_Documento_Mestre_Instrucoes_Desenvolvimento_2026-10-16.md whitespace=-blank-at-eol
+docs/requisitos/FRcaixinha_2_2_Caderno_Mestre_Controle_Manual_Desenvolvimento_2026-10-17.md whitespace=-blank-at-eol

@@ -1,0 +1,37 @@
+# Credenciais e configuracoes privadas
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+*.age
+google-services.json
+key.properties
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Flutter / Dart / Android
+.dart_tool/
+.flutter-plugins*
+.packages
+build/
+.gradle/
+local.properties
+
+# Arquivos locais e temporarios
+*.log
+*.dump
+*.sqlite
+*.db
+.idea/
+.vscode/
