@@ -21,3 +21,13 @@ httpx==0.28.1
 # Testes: dependências transitivas adicionais
 httpcore==1.0.9
 certifi==2026.7.22
+
+# Banco de dados: dependencias diretas
+SQLAlchemy==2.0.55
+alembic==1.20.0
+psycopg==3.3.6
+
+# Banco de dados: dependencias transitivas
+greenlet==3.5.6
+Mako==1.4.3
+MarkupSafe==3.0.4
