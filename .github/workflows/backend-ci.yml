@@ -1,0 +1,43 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  unittest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Install pinned dependencies
+        run: python -m pip install --no-deps --no-cache-dir -r requirements.txt
+
+      - name: Check dependencies
+        run: python -m pip check
+
+      - name: Run FastAPI tests
+        run: python -B -m unittest discover -s tests -p 'test_*.py' -v
