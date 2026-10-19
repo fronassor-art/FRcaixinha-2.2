@@ -215,3 +215,96 @@ class ContractingParty(IdentityColumns, Base):
         default="PRELIMINAR",
         server_default=text("'PRELIMINAR'"),
     )
+
+
+
+class Tenant(IdentityColumns, Base):
+    __tablename__ = "tenants"
+
+    __table_args__ = (
+        CheckConstraint(
+            "display_name ~ '[^[:space:]]'",
+            name="display_name_nonblank",
+        ),
+        CheckConstraint(
+            "status = 'RASCUNHO_INATIVO'",
+            name="status_initial_only",
+        ),
+        Index("ix_tenants_contracting_party_id", "contracting_party_id"),
+        Index("ix_tenants_admin_user_id", "admin_user_id"),
+    )
+
+    # A camada de servico deve conferir o titular PF ou representante PJ.
+    # As duas FKs independentes nao comprovam essa correspondencia.
+    admin_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user_identities.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    contracting_party_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("contracting_parties.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="RASCUNHO_INATIVO",
+        server_default=text("'RASCUNHO_INATIVO'"),
+    )
+
+
+class RoleGrant(IdentityColumns, Base):
+    __tablename__ = "role_grants"
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('MASTER', 'TENANT_ADMIN', 'TENANT_MEMBER')",
+            name="role_valid",
+        ),
+        CheckConstraint(
+            "(role = 'MASTER' AND tenant_id IS NULL) OR "
+            "(role IN ('TENANT_ADMIN', 'TENANT_MEMBER') "
+            "AND tenant_id IS NOT NULL)",
+            name="role_scope_valid",
+        ),
+        CheckConstraint(
+            "active_until IS NULL OR active_until > active_from",
+            name="active_interval_valid",
+        ),
+        # Estes indices barram duplicacao exata, nao intervalos sobrepostos.
+        Index(
+            "uq_role_grants_global_start",
+            "user_id", "role", "active_from",
+            unique=True,
+            postgresql_where=text("tenant_id IS NULL"),
+        ),
+        Index(
+            "uq_role_grants_tenant_start",
+            "tenant_id", "user_id", "role", "active_from",
+            unique=True,
+            postgresql_where=text("tenant_id IS NOT NULL"),
+        ),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user_identities.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    tenant_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    active_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    active_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

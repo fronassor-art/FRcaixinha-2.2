@@ -83,7 +83,7 @@ def run_migrations_online():
             identity = connection.execute(
                 text(
                     "SELECT current_database(), current_user, "
-                    "inet_server_addr()::text, inet_server_port(), "
+                    "host(inet_server_addr()), inet_server_port(), "
                     "current_setting('server_version_num')"
                 )
             ).one()
