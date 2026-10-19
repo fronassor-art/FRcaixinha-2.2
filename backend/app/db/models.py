@@ -4,17 +4,20 @@ Somente definicoes de esquema. Nenhuma conexao e aberta.
 CPF/CNPJ exigem criptografia e HMAC antes de persistencia.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     Index,
     ForeignKey,
+    Integer,
     LargeBinary,
     MetaData,
     String,
+    UniqueConstraint,
     func,
     text,
 )
@@ -252,6 +255,42 @@ class Tenant(IdentityColumns, Base):
         nullable=False,
         default="RASCUNHO_INATIVO",
         server_default=text("'RASCUNHO_INATIVO'"),
+    )
+
+
+class Cycle(IdentityColumns, Base):
+    __tablename__ = "cycles"
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "year"),
+        # Permite FKs compostas (tenant_id, cycle_id) em tabelas futuras.
+        UniqueConstraint("tenant_id", "id"),
+        CheckConstraint("year >= 1", name="year_positive"),
+        CheckConstraint("start_date = make_date(year, 1, 1)", name="start_date_calendar"),
+        CheckConstraint("end_date = make_date(year, 12, 31)", name="end_date_calendar"),
+        CheckConstraint(
+            "settlement_date = make_date(year + 1, 1, 10)",
+            name="settlement_date_calendar",
+        ),
+        CheckConstraint("status = 'PLANEJADO_INATIVO'", name="status_initial_only"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    # DATE representa o calendario civil em America/Belem.
+    # A imutabilidade historica exige controles futuros de servico e banco.
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    settlement_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PLANEJADO_INATIVO",
+        server_default=text("'PLANEJADO_INATIVO'"),
     )
 
 
