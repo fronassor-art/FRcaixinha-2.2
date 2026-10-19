@@ -201,7 +201,7 @@ class LicenseOfferAcceptanceSchemaTests(unittest.TestCase):
         )
         self.assertIn(offer_key, self.uniques(LicenseOffer.__table__))
         self.assertEqual(self.uniques(TermAcceptance.__table__),
-                         {("offer_id",)})
+                         {("offer_id",), ("id", "offer_id", "tenant_id", "price_version_id", "effective_price")})
         fks = self.foreign_keys(TermAcceptance.__table__)
         self.assertEqual(
             fks[acceptance_key],

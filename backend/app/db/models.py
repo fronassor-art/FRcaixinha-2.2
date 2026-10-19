@@ -694,6 +694,7 @@ class TermAcceptance(IdentityColumns, Base):
 
     __table_args__ = (
         UniqueConstraint("offer_id"),
+        UniqueConstraint("id", "offer_id", "tenant_id", "price_version_id", "effective_price"),
         ForeignKeyConstraint(
             [
                 "offer_id", "tenant_id", "user_id", "price_version_id",
@@ -762,3 +763,180 @@ class TermAcceptance(IdentityColumns, Base):
     # Uma etapa futura deve validar: autorização PF/PJ do signatário,
     # versão vigente e preço efetivo da oferta, estado do plano, ausência
     # de checkout Ampliado e imutabilidade contra UPDATE/DELETE no banco.
+
+
+class LicensePaymentObligation(IdentityColumns, Base):
+    """Obrigação comercial inativa ancorada em um aceite de licença."""
+
+    __tablename__ = "license_payment_obligations"
+
+    __table_args__ = (
+        UniqueConstraint("offer_id"),
+        UniqueConstraint("term_acceptance_id"),
+        UniqueConstraint(
+            "id", "tenant_id", "offer_id", "price_version_id", "expected_amount"
+        ),
+        ForeignKeyConstraint(
+            [
+                "term_acceptance_id", "offer_id", "tenant_id",
+                "price_version_id", "expected_amount",
+            ],
+            [
+                "term_acceptances.id", "term_acceptances.offer_id",
+                "term_acceptances.tenant_id", "term_acceptances.price_version_id",
+                "term_acceptances.effective_price",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("cycle_id IS NULL", name="license_cycle_absent"),
+        CheckConstraint("expected_amount > 0", name="expected_amount_positive"),
+        CheckConstraint("currency = 'BRL'", name="currency_brl"),
+        CheckConstraint("purpose = 'LICENCA'", name="purpose_license"),
+        CheckConstraint(
+            "status = 'RASCUNHO_INATIVO'",
+            name="status_initial_only",
+        ),
+        Index(
+            "ix_license_payment_obligations_tenant_offer",
+            "tenant_id", "offer_id",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    cycle_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    offer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    term_acceptance_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    price_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    expected_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False
+    )
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, server_default=text("'BRL'")
+    )
+    purpose: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'LICENCA'")
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="RASCUNHO_INATIVO",
+        server_default=text("'RASCUNHO_INATIVO'"),
+    )
+
+
+class Payment(IdentityColumns, Base):
+    """Pagamento lógico inativo; futuras tentativas reutilizam este id."""
+
+    __tablename__ = "payments"
+
+    __table_args__ = (
+        UniqueConstraint("obligation_id"),
+        UniqueConstraint("idempotency_key"),
+        ForeignKeyConstraint(
+            [
+                "obligation_id", "tenant_id", "offer_id",
+                "price_version_id", "expected_amount",
+            ],
+            [
+                "license_payment_obligations.id",
+                "license_payment_obligations.tenant_id",
+                "license_payment_obligations.offer_id",
+                "license_payment_obligations.price_version_id",
+                "license_payment_obligations.expected_amount",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("cycle_id IS NULL", name="license_cycle_absent"),
+        CheckConstraint("expected_amount > 0", name="expected_amount_positive"),
+        CheckConstraint(
+            "confirmed_amount IS NULL OR confirmed_amount >= 0",
+            name="confirmed_amount_nonnegative",
+        ),
+        CheckConstraint("currency = 'BRL'", name="currency_brl"),
+        CheckConstraint("purpose = 'LICENCA'", name="purpose_license"),
+        CheckConstraint(
+            "receiver_domain = 'PLATAFORMA'",
+            name="receiver_domain_platform",
+        ),
+        CheckConstraint(
+            "(provider IS NULL AND external_id IS NULL) OR "
+            "(provider IS NOT NULL AND external_id IS NOT NULL)",
+            name="provider_external_pair",
+        ),
+        CheckConstraint(
+            "external_id IS NULL OR receiver_ref IS NOT NULL",
+            name="external_receiver_required",
+        ),
+        CheckConstraint(
+            "status = 'NAO_INICIADO_INATIVO'",
+            name="status_initial_only",
+        ),
+        CheckConstraint(
+            "confirmed_amount IS NULL AND provider IS NULL "
+            "AND external_id IS NULL AND receiver_ref IS NULL "
+            "AND confirmed_at IS NULL AND evidence_ref IS NULL",
+            name="initial_financial_fields_absent",
+        ),
+        Index("ix_payments_tenant_obligation", "tenant_id", "obligation_id"),
+        Index("ix_payments_tenant_offer", "tenant_id", "offer_id"),
+        Index(
+            "uq_payments_provider_receiver_external",
+            "provider", "receiver_ref", "external_id",
+            unique=True,
+            postgresql_where=text("external_id IS NOT NULL"),
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    cycle_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    obligation_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    offer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    price_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    expected_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False
+    )
+    confirmed_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 2), nullable=True
+    )
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, server_default=text("'BRL'")
+    )
+    purpose: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'LICENCA'")
+    )
+    receiver_domain: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'PLATAFORMA'")
+    )
+    idempotency_key: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    receiver_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    evidence_ref: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="NAO_INICIADO_INATIVO",
+        server_default=text("'NAO_INICIADO_INATIVO'"),
+    )
+
+    # Serviço e migration futuros devem proteger valor, histórico e transições,
+    # validar conta recebedora, consultar o provedor e conciliar reversões.
