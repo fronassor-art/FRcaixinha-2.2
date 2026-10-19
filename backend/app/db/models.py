@@ -20,12 +20,14 @@ from sqlalchemy import (
     LargeBinary,
     MetaData,
     Numeric,
+    SmallInteger,
     String,
     UniqueConstraint,
     func,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -229,6 +231,7 @@ class Tenant(IdentityColumns, Base):
     __tablename__ = "tenants"
 
     __table_args__ = (
+        UniqueConstraint("id", "contracting_party_id"),
         CheckConstraint(
             "display_name ~ '[^[:space:]]'",
             name="display_name_nonblank",
@@ -467,6 +470,7 @@ class LicensePlan(IdentityColumns, Base):
     __tablename__ = "license_plans"
 
     __table_args__ = (
+        Index("uq_license_plans_id_limits", "id", "member_limit", "quota_limit", unique=True),
         UniqueConstraint("name"),
         CheckConstraint(
             "name IN ('Essencial', 'Intermediário', 'Ampliado')",
@@ -564,3 +568,197 @@ class LicensePriceVersion(IdentityColumns, Base):
         nullable=False,
     )
     reason: Mapped[str] = mapped_column(String(512), nullable=False)
+
+
+class LicenseOffer(IdentityColumns, Base):
+    """Fotografia comercial inativa; emissão e cobrança dependem de serviço futuro."""
+
+    __tablename__ = "license_offers"
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "contracting_party_id"],
+            ["tenants.id", "tenants.contracting_party_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["plan_id", "plan_member_limit", "plan_quota_limit"],
+            ["license_plans.id", "license_plans.member_limit", "license_plans.quota_limit"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["plan_id", "price_version_id"],
+            ["license_price_versions.plan_id", "license_price_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        # A chave composta permite ao aceite comprovar que todos os dados
+        # replicados vieram da mesma oferta, inclusive identidade e documento.
+        UniqueConstraint(
+            "id", "tenant_id", "signer_user_id", "price_version_id",
+            "effective_price", "period", "duration_months",
+            "document_version", "document_hash",
+        ),
+        CheckConstraint(
+            "contracting_party_name_snapshot ~ '[^[:space:]]'",
+            name="party_name_nonblank",
+        ),
+        CheckConstraint(
+            "plan_member_limit > 0 AND plan_quota_limit > 0",
+            name="plan_limits_positive",
+        ),
+        CheckConstraint(
+            "requested_member_count > 0 AND requested_member_count <= plan_member_limit",
+            name="requested_members_within_plan",
+        ),
+        CheckConstraint(
+            "requested_quota_count > 0 AND requested_quota_count <= plan_quota_limit",
+            name="requested_quotas_within_plan",
+        ),
+        CheckConstraint(
+            "(period = 'MENSAL' AND duration_months = 1) OR "
+            "(period = 'ANUAL' AND duration_months = 12)",
+            name="period_duration_valid",
+        ),
+        CheckConstraint("effective_price > 0", name="effective_price_positive"),
+        CheckConstraint("currency = 'BRL'", name="currency_brl"),
+        CheckConstraint(
+            "document_version ~ '[^[:space:]]'",
+            name="document_version_nonblank",
+        ),
+        CheckConstraint("length(btrim(document_ref)) > 0", name="document_ref_nonblank"),
+        CheckConstraint(
+            "octet_length(document_hash) = 32",
+            name="document_hash_sha256_length",
+        ),
+        CheckConstraint("expires_at > issued_at", name="finite_validity"),
+        CheckConstraint(
+            "status = 'RASCUNHO_INATIVO'",
+            name="status_initial_only",
+        ),
+        Index(
+            "ix_license_offers_tenant_party",
+            "tenant_id", "contracting_party_id",
+        ),
+        Index("ix_license_offers_tenant_plan", "tenant_id", "plan_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    contracting_party_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    signer_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user_identities.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    plan_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    price_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    contracting_party_name_snapshot: Mapped[str] = mapped_column(
+        String(200), nullable=False
+    )
+    plan_member_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    plan_quota_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    requested_member_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    requested_quota_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    period: Mapped[str] = mapped_column(String(8), nullable=False)
+    duration_months: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    effective_price: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False
+    )
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, server_default=text("'BRL'")
+    )
+    document_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    document_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    document_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="RASCUNHO_INATIVO",
+        server_default=text("'RASCUNHO_INATIVO'"),
+    )
+
+
+class TermAcceptance(IdentityColumns, Base):
+    """Aceite de licença inativo; não comprova representação nem pagamento."""
+
+    __tablename__ = "term_acceptances"
+
+    __table_args__ = (
+        UniqueConstraint("offer_id"),
+        ForeignKeyConstraint(
+            [
+                "offer_id", "tenant_id", "user_id", "price_version_id",
+                "effective_price", "period", "duration_months",
+                "document_version", "document_hash",
+            ],
+            [
+                "license_offers.id", "license_offers.tenant_id",
+                "license_offers.signer_user_id", "license_offers.price_version_id",
+                "license_offers.effective_price", "license_offers.period",
+                "license_offers.duration_months", "license_offers.document_version",
+                "license_offers.document_hash",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("scope = 'LICENCA'", name="scope_initial_only"),
+        CheckConstraint("cycle_id IS NULL", name="license_cycle_absent"),
+        CheckConstraint("effective_price > 0", name="effective_price_positive"),
+        CheckConstraint(
+            "document_version ~ '[^[:space:]]'",
+            name="document_version_nonblank",
+        ),
+        CheckConstraint(
+            "octet_length(document_hash) = 32",
+            name="document_hash_sha256_length",
+        ),
+        CheckConstraint(
+            "evidence_ref ~ '[^[:space:]]'",
+            name="evidence_ref_nonblank",
+        ),
+        Index("ix_term_acceptances_tenant_offer", "tenant_id", "offer_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    cycle_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    offer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user_identities.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    price_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    effective_price: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False
+    )
+    period: Mapped[str] = mapped_column(String(8), nullable=False)
+    duration_months: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    document_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    document_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ip_address: Mapped[str] = mapped_column(INET, nullable=False)
+    evidence_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    scope: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="LICENCA",
+        server_default=text("'LICENCA'"),
+    )
+
+    # Uma etapa futura deve validar: autorização PF/PJ do signatário,
+    # versão vigente e preço efetivo da oferta, estado do plano, ausência
+    # de checkout Ampliado e imutabilidade contra UPDATE/DELETE no banco.
