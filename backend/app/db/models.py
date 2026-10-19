@@ -5,10 +5,12 @@ CPF/CNPJ exigem criptografia e HMAC antes de persistencia.
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     Date,
     DateTime,
     Index,
@@ -17,6 +19,7 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     MetaData,
+    Numeric,
     String,
     UniqueConstraint,
     func,
@@ -458,3 +461,106 @@ class Quota(IdentityColumns, Base):
     effective_to: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class LicensePlan(IdentityColumns, Base):
+    __tablename__ = "license_plans"
+
+    __table_args__ = (
+        UniqueConstraint("name"),
+        CheckConstraint(
+            "name IN ('Essencial', 'Intermediário', 'Ampliado')",
+            name="name_valid",
+        ),
+        CheckConstraint(
+            "member_limit IS NULL OR member_limit > 0",
+            name="member_limit_positive",
+        ),
+        CheckConstraint(
+            "quota_limit IS NULL OR quota_limit > 0",
+            name="quota_limit_positive",
+        ),
+        CheckConstraint(
+            "(member_limit IS NULL AND quota_limit IS NULL) OR "
+            "(member_limit IS NOT NULL AND quota_limit IS NOT NULL)",
+            name="capacity_pair_valid",
+        ),
+        CheckConstraint(
+            "(name = 'Essencial' AND member_limit IS NOT DISTINCT FROM 20 AND quota_limit IS NOT DISTINCT FROM 40) OR "
+            "(name = 'Intermediário' AND member_limit IS NOT DISTINCT FROM 50 AND quota_limit IS NOT DISTINCT FROM 50) OR "
+            "(name = 'Ampliado' AND member_limit IS NULL AND quota_limit IS NULL)",
+            name="approved_capacity",
+        ),
+        CheckConstraint("status = 'INATIVO'", name="status_initial_only"),
+    )
+
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    member_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quota_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="INATIVO",
+        server_default=text("'INATIVO'"),
+    )
+
+
+class LicensePriceVersion(IdentityColumns, Base):
+    __tablename__ = "license_price_versions"
+
+    __table_args__ = (
+        # A chave composta impede vincular a versão anterior a outro plano.
+        UniqueConstraint("plan_id", "id"),
+        UniqueConstraint("plan_id", "effective_from"),
+        UniqueConstraint("previous_price_version_id"),
+        ForeignKeyConstraint(
+            ["plan_id", "previous_price_version_id"],
+            ["license_price_versions.plan_id", "license_price_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("monthly_price > 0", name="monthly_price_positive"),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to > effective_from",
+            name="effective_interval_valid",
+        ),
+        CheckConstraint("reason ~ '[^[:space:]]'", name="reason_nonblank"),
+        CheckConstraint(
+            "previous_price_version_id IS NULL OR "
+            "previous_price_version_id <> id",
+            name="previous_version_distinct",
+        ),
+        Index(
+            "uq_license_price_versions_open_plan",
+            "plan_id",
+            unique=True,
+            postgresql_where=text("effective_to IS NULL"),
+        ),
+    )
+
+    plan_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("license_plans.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    previous_price_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    monthly_price: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False
+    )
+    annual_price_computed: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), Computed("monthly_price * 10", persisted=True),
+        nullable=False,
+    )
+    effective_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    effective_to: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    changed_by: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user_identities.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(String(512), nullable=False)
