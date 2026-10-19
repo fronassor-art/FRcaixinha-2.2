@@ -1,0 +1,217 @@
+"""Modelos iniciais de identidade e contratacao.
+
+Somente definicoes de esquema. Nenhuma conexao e aberta.
+CPF/CNPJ exigem criptografia e HMAC antes de persistencia.
+"""
+
+from datetime import datetime
+from uuid import UUID, uuid4
+
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Index,
+    ForeignKey,
+    LargeBinary,
+    MetaData,
+    String,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    metadata = MetaData(
+        naming_convention={
+            "ix": "ix_%(table_name)s_%(column_0_N_name)s",
+            "uq": "uq_%(table_name)s_%(column_0_N_name)s",
+            "ck": "ck_%(table_name)s_%(constraint_name)s",
+            "fk": "fk_%(table_name)s_%(column_0_N_name)s_%(referred_table_name)s",
+            "pk": "pk_%(table_name)s",
+        }
+    )
+
+
+class IdentityColumns:
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class UserIdentity(IdentityColumns, Base):
+    __tablename__ = "user_identities"
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    cpf_ciphertext: Mapped[bytes] = mapped_column(
+        LargeBinary, nullable=False
+    )
+    cpf_lookup_hmac: Mapped[bytes] = mapped_column(
+        LargeBinary, nullable=False, unique=True
+    )
+    email: Mapped[str] = mapped_column(
+        String(254), nullable=False
+    )
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    phone: Mapped[str] = mapped_column(String(11), nullable=False)
+    phone_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    profile_photo_ref: Mapped[str | None] = mapped_column(
+        String(512)
+    )
+    auth_subject: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PENDENTE",
+        server_default=text("'PENDENTE'"),
+    )
+
+
+    __table_args__ = (
+        Index("uq_user_identities_email_lower", func.lower(email), unique=True),
+        CheckConstraint(
+            "status IN ('PENDENTE', 'ATIVA', 'SUSPENSA', 'ENCERRADA')",
+            name="status_valid",
+        ),
+    )
+
+class ContractingParty(IdentityColumns, Base):
+    __tablename__ = "contracting_parties"
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PRELIMINAR', 'EM_ANALISE', 'APTO', 'SUSPENSO', 'ENCERRADO')",
+            name="status_valid",
+        ),
+        CheckConstraint(
+            "party_type IN ('PF', 'PJ')",
+            name="party_type_valid",
+        ),
+        CheckConstraint(
+            "party_type = 'PF' OR representative_user_id IS NOT NULL",
+            name="pj_representative_required",
+        ),
+        CheckConstraint(
+            "party_type = 'PJ' OR pf_user_id IS NOT NULL",
+            name="pf_identity_required",
+        ),
+        CheckConstraint(
+            "party_type = 'PJ' OR representative_user_id IS NULL",
+            name="pf_representative_absent",
+        ),
+        CheckConstraint(
+            "party_type = 'PF' OR pf_user_id IS NULL",
+            name="pj_pf_identity_absent",
+        ),
+        CheckConstraint(
+            "party_type = 'PJ' OR (tax_id_ciphertext IS NULL "
+            "AND tax_id_lookup_hmac IS NULL)",
+            name="pf_pj_document_absent",
+        ),
+        CheckConstraint(
+            "party_type = 'PF' OR (tax_id_ciphertext IS NOT NULL "
+            "AND tax_id_lookup_hmac IS NOT NULL)",
+            name="pj_cnpj_required",
+        ),
+        CheckConstraint(
+            "party_type = 'PJ' OR (representation_declaration_ref IS NULL "
+            "AND representation_evidence_ref IS NULL "
+            "AND representation_verification_ref IS NULL "
+            "AND representation_verified_at IS NULL)",
+            name="pf_representation_fields_absent",
+        ),
+        CheckConstraint(
+            "representation_verified_at IS NULL OR (party_type = 'PJ' "
+            "AND representation_declaration_ref IS NOT NULL "
+            "AND representation_verification_ref IS NOT NULL)",
+            name="representation_verification_evidenced",
+        ),
+        CheckConstraint(
+            "party_type = 'PF' OR status <> 'APTO' OR "
+            "(representative_user_id IS NOT NULL "
+            "AND representation_declaration_ref IS NOT NULL "
+            "AND representation_verification_ref IS NOT NULL "
+            "AND representation_verified_at IS NOT NULL)",
+            name="pj_apto_representation_verified",
+        ),
+        CheckConstraint(
+            "representation_declaration_ref IS NULL OR "
+            "representation_declaration_ref ~ '[^[:space:]]'",
+            name="representation_declaration_ref_nonblank",
+        ),
+        CheckConstraint(
+            "representation_evidence_ref IS NULL OR "
+            "representation_evidence_ref ~ '[^[:space:]]'",
+            name="representation_evidence_ref_nonblank",
+        ),
+        CheckConstraint(
+            "representation_verification_ref IS NULL OR "
+            "representation_verification_ref ~ '[^[:space:]]'",
+            name="representation_verification_ref_nonblank",
+        ),
+    )
+
+    party_type: Mapped[str] = mapped_column(
+        String(2), nullable=False
+    )
+    legal_name: Mapped[str] = mapped_column(
+        String(200), nullable=False
+    )
+    # Somente CNPJ de PJ; CPF de PF vem de UserIdentity via pf_user_id.
+    tax_id_ciphertext: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    tax_id_lookup_hmac: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True, unique=True
+    )
+    billing_address: Mapped[dict | None] = mapped_column(JSONB)
+    pf_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user_identities.id"),
+        unique=True,
+    )
+    representative_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user_identities.id"),
+    )
+    # Opaque references to protected records; never store document content here.
+    representation_declaration_ref: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    representation_evidence_ref: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    representation_verification_ref: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    representation_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    fiscal_data: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PRELIMINAR",
+        server_default=text("'PRELIMINAR'"),
+    )
