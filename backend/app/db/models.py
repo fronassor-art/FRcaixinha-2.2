@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Index,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     LargeBinary,
     MetaData,
@@ -346,4 +347,56 @@ class RoleGrant(IdentityColumns, Base):
     )
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class Membership(IdentityColumns, Base):
+    __tablename__ = "memberships"
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "cycle_id"],
+            ["cycles.tenant_id", "cycles.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status = 'PENDENTE_INATIVO'",
+            name="status_initial_only",
+        ),
+        CheckConstraint(
+            "status <> 'PENDENTE_INATIVO' OR "
+            "(joined_at IS NULL AND left_at IS NULL)",
+            name="pending_dates_null",
+        ),
+        # O dominio atual rejeita ATIVA; este indice prepara a ativacao futura.
+        Index(
+            "uq_memberships_active_identity_cycle",
+            "tenant_id", "cycle_id", "user_id",
+            unique=True,
+            postgresql_where=text("status = 'ATIVA'"),
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    cycle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user_identities.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    joined_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    left_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PENDENTE_INATIVO",
+        server_default=text("'PENDENTE_INATIVO'"),
     )
