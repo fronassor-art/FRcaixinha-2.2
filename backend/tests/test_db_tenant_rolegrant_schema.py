@@ -24,7 +24,7 @@ class TenantRoleGrantSchemaTests(unittest.TestCase):
     def test_tables_uuid_and_timestamps(self):
         self.assertEqual(
             set(Base.metadata.tables),
-            {"user_identities", "contracting_parties", "tenants", "cycles", "role_grants", "memberships"},
+            {"user_identities", "contracting_parties", "tenants", "cycles", "role_grants", "memberships", "quotas"},
         )
         for entity in (Tenant, RoleGrant):
             with self.subTest(entity=entity.__name__):

@@ -359,6 +359,9 @@ class Membership(IdentityColumns, Base):
             ["cycles.tenant_id", "cycles.id"],
             ondelete="RESTRICT",
         ),
+        # Referencia composta para garantir o mesmo tenant/ciclo nas cotas.
+        # O id continua unico por PK; esta chave nao restringe historico.
+        UniqueConstraint("tenant_id", "cycle_id", "id"),
         CheckConstraint(
             "status = 'PENDENTE_INATIVO'",
             name="status_initial_only",
@@ -399,4 +402,59 @@ class Membership(IdentityColumns, Base):
         nullable=False,
         default="PENDENTE_INATIVO",
         server_default=text("'PENDENTE_INATIVO'"),
+    )
+
+
+class Quota(IdentityColumns, Base):
+    __tablename__ = "quotas"
+
+    __table_args__ = (
+        # Uma cota deve pertencer a um Membership do mesmo tenant e ciclo.
+        ForeignKeyConstraint(
+            ["tenant_id", "cycle_id", "membership_id"],
+            ["memberships.tenant_id", "memberships.cycle_id", "memberships.id"],
+            ondelete="RESTRICT",
+        ),
+        # Numero independente por ciclo; a mesma pessoa pode ter varias cotas.
+        UniqueConstraint("tenant_id", "cycle_id", "quota_number"),
+        Index(
+            "ix_quotas_tenant_cycle_membership",
+            "tenant_id", "cycle_id", "membership_id",
+        ),
+        CheckConstraint("quota_number > 0", name="quota_number_positive"),
+        CheckConstraint(
+            "status = 'PENDENTE_INATIVA'",
+            name="status_initial_only",
+        ),
+        # Nenhum marco de vigencia nem capacidade enquanto inativa.
+        CheckConstraint(
+            "status <> 'PENDENTE_INATIVA' OR "
+            "(effective_from IS NULL AND effective_to IS NULL)",
+            name="inactive_dates_null",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    cycle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    membership_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    quota_number: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="PENDENTE_INATIVA",
+        server_default=text("'PENDENTE_INATIVA'"),
+    )
+    effective_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    effective_to: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

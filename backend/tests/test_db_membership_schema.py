@@ -118,10 +118,13 @@ class MembershipSchemaTests(unittest.TestCase):
 
     def test_partial_unique_index_preserves_history(self):
         table = Membership.__table__
-        self.assertFalse(any(
-            isinstance(constraint, UniqueConstraint)
+        # Unicidade tecnica para FK composta, sem unicidade por usuario.
+        uniques = {
+            tuple(column.name for column in constraint.columns)
             for constraint in table.constraints
-        ))
+            if isinstance(constraint, UniqueConstraint)
+        }
+        self.assertEqual(uniques, {("tenant_id", "cycle_id", "id")})
         self.assertFalse(bool(table.c.user_id.unique))
         indexes = {index.name: index for index in table.indexes}
         self.assertEqual(set(indexes), {"uq_memberships_active_identity_cycle"})
@@ -148,6 +151,7 @@ class MembershipSchemaTests(unittest.TestCase):
             "left_at TIMESTAMP WITH TIME ZONE",
             "status VARCHAR(32) DEFAULT 'PENDENTE_INATIVO' NOT NULL",
             "FOREIGN KEY(tenant_id, cycle_id) REFERENCES cycles (tenant_id, id)",
+            "CONSTRAINT uq_memberships_tenant_id_cycle_id_id UNIQUE (tenant_id, cycle_id, id)",
             "FOREIGN KEY(user_id) REFERENCES user_identities (id)",
             "ON DELETE RESTRICT",
             "status = 'PENDENTE_INATIVO'",
