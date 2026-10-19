@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import CheckConstraint, DateTime, ForeignKeyConstraint, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.dialects.postgresql import dialect
-from sqlalchemy.schema import CreateTable
+from sqlalchemy.schema import CreateIndex, CreateTable
 
 from app.db.models import Base, Membership, Quota
 
@@ -93,7 +93,10 @@ class QuotaSchemaTests(unittest.TestCase):
         }
         self.assertEqual(uniques, {("tenant_id", "cycle_id", "quota_number")})
         self.assertFalse(bool(table.c.membership_id.unique))
-        self.assertFalse(table.indexes)
+        self.assertEqual(
+            {index.name for index in table.indexes},
+            {"ix_quotas_tenant_cycle_membership"},
+        )
         # Os numeros 1 e 2 podem referir o mesmo membro; nenhum UNIQUE o impede.
         sample = [
             ("tenant-a", "cycle-a", "member-a", 1),
@@ -123,6 +126,23 @@ class QuotaSchemaTests(unittest.TestCase):
         for state in ("ATIVA", "ENCERRADA", "CANCELADA", "", " "):
             with self.subTest(state=state):
                 self.assertNotEqual(state, "PENDENTE_INATIVA")
+
+    def test_membership_lookup_index_compiles_for_postgresql(self):
+        table = Quota.__table__
+        self.assertEqual(len(table.indexes), 1)
+        index = next(iter(table.indexes))
+        self.assertEqual(index.name, "ix_quotas_tenant_cycle_membership")
+        self.assertEqual(index.table, table)
+        self.assertEqual(
+            tuple(column.name for column in index.columns),
+            ("tenant_id", "cycle_id", "membership_id"),
+        )
+        self.assertFalse(index.unique)
+        self.assertEqual(
+            str(CreateIndex(index).compile(dialect=dialect())),
+            "CREATE INDEX ix_quotas_tenant_cycle_membership "
+            "ON quotas (tenant_id, cycle_id, membership_id)",
+        )
 
     def test_inactive_effective_dates_are_null_and_timezone_aware(self):
         columns = Quota.__table__.c

@@ -417,6 +417,10 @@ class Quota(IdentityColumns, Base):
         ),
         # Numero independente por ciclo; a mesma pessoa pode ter varias cotas.
         UniqueConstraint("tenant_id", "cycle_id", "quota_number"),
+        Index(
+            "ix_quotas_tenant_cycle_membership",
+            "tenant_id", "cycle_id", "membership_id",
+        ),
         CheckConstraint("quota_number > 0", name="quota_number_positive"),
         CheckConstraint(
             "status = 'PENDENTE_INATIVA'",
