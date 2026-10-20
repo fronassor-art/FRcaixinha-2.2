@@ -598,6 +598,11 @@ class LicenseOffer(IdentityColumns, Base):
             "effective_price", "period", "duration_months",
             "document_version", "document_hash",
         ),
+        UniqueConstraint(
+            "id", "tenant_id", "contracting_party_id", "plan_id",
+            "price_version_id", "effective_price", "period", "duration_months",
+            name="uq_license_offers_c16_subscription_link",
+        ),
         CheckConstraint(
             "contracting_party_name_snapshot ~ '[^[:space:]]'",
             name="party_name_nonblank",
@@ -1091,3 +1096,169 @@ class PaymentReconciliationEvent(IdentityColumns, Base):
 
     # Sem payload bruto ou efeito financeiro. Imutabilidade, replay e
     # conciliacao de divergencias exigem PostgreSQL e servicos futuros.
+
+
+class LicenseSubscription(IdentityColumns, Base):
+    """Um ato comercial por oferta e aceite, sem direito de uso nesta revisao."""
+
+    __tablename__ = "license_subscriptions"
+
+    __table_args__ = (
+        UniqueConstraint("offer_id", name="uq_license_subscriptions_offer_id"),
+        UniqueConstraint(
+            "term_acceptance_id", name="uq_license_subscriptions_term_acceptance_id"
+        ),
+        UniqueConstraint("id", "tenant_id", name="uq_license_subscriptions_id_tenant"),
+        ForeignKeyConstraint(
+            ["tenant_id", "contracting_party_id"],
+            ["tenants.id", "tenants.contracting_party_id"],
+            name="fk_license_subscriptions_tenant_party",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "offer_id", "tenant_id", "contracting_party_id", "plan_id",
+                "price_version_id", "effective_price", "period", "duration_months",
+            ],
+            [
+                "license_offers.id", "license_offers.tenant_id",
+                "license_offers.contracting_party_id", "license_offers.plan_id",
+                "license_offers.price_version_id", "license_offers.effective_price",
+                "license_offers.period", "license_offers.duration_months",
+            ],
+            name="fk_license_subscriptions_offer_context",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "term_acceptance_id", "offer_id", "tenant_id",
+                "price_version_id", "effective_price",
+            ],
+            [
+                "term_acceptances.id", "term_acceptances.offer_id",
+                "term_acceptances.tenant_id", "term_acceptances.price_version_id",
+                "term_acceptances.effective_price",
+            ],
+            name="fk_license_subscriptions_acceptance_context",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(period = 'MENSAL' AND duration_months = 1) OR "
+            "(period = 'ANUAL' AND duration_months = 12)",
+            name="period_duration_valid",
+        ),
+        CheckConstraint("effective_price > 0", name="effective_price_positive"),
+        CheckConstraint("status = 'RASCUNHO_INATIVO'", name="status_initial_only"),
+        CheckConstraint(
+            "paid_payment_id IS NULL AND starts_at IS NULL AND "
+            "ends_at IS NULL AND anchor_day IS NULL",
+            name="initial_entitlement_absent",
+        ),
+        Index("ix_license_subscriptions_tenant_offer", "tenant_id", "offer_id"),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    contracting_party_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    plan_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    offer_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    term_acceptance_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    price_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    period: Mapped[str] = mapped_column(String(8), nullable=False)
+    duration_months: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    effective_price: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    paid_payment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    anchor_day: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False,
+        default="RASCUNHO_INATIVO", server_default=text("'RASCUNHO_INATIVO'"),
+    )
+
+    # O FK financeiro depende de conciliacao e de uma chave composta propria.
+    # Nesta revisao paid_payment_id deve ser NULL; nenhum pagamento ativa uso.
+
+
+class LicenseEntitlementSegment(IdentityColumns, Base):
+    """Lugar reservado para historico de direitos, sem vigencia concedida."""
+
+    __tablename__ = "license_entitlement_segments"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "subscription_id", "segment_number",
+            name="uq_license_entitlement_segments_subscription_number",
+        ),
+        UniqueConstraint(
+            "id", "tenant_id",
+            name="uq_license_entitlement_segments_origin_key",
+        ),
+        ForeignKeyConstraint(
+            ["subscription_id", "tenant_id"],
+            ["license_subscriptions.id", "license_subscriptions.tenant_id"],
+            name="fk_license_entitlement_segments_subscription_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["origin_segment_id", "tenant_id"],
+            [
+                "license_entitlement_segments.id",
+                "license_entitlement_segments.tenant_id",
+            ],
+            name="fk_license_entitlement_segments_origin_context",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("segment_number > 0", name="segment_number_positive"),
+        CheckConstraint("status = 'RASCUNHO_INATIVO'", name="status_initial_only"),
+        CheckConstraint(
+            "period_start IS NULL AND period_end IS NULL AND anchor_day IS NULL "
+            "AND payment_id IS NULL AND amount_allocated IS NULL "
+            "AND calculated_at IS NULL AND origin_segment_id IS NULL",
+            name="initial_entitlement_absent",
+        ),
+        Index(
+            "ix_license_entitlement_segments_tenant_subscription",
+            "tenant_id", "subscription_id",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    subscription_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    segment_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    period_start: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    period_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    anchor_day: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    payment_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    amount_allocated: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 2), nullable=True
+    )
+    calculated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    origin_segment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False,
+        default="RASCUNHO_INATIVO", server_default=text("'RASCUNHO_INATIVO'"),
+    )
+
+    # Append-only e provas de pagamento exigem revisao e servico futuros.
