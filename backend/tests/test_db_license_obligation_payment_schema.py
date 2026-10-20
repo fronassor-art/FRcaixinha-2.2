@@ -154,7 +154,8 @@ class LicenseObligationPaymentSchemaTests(unittest.TestCase):
         )
         self.assertEqual(
             self.uniques(Payment.__table__),
-            {("obligation_id",), ("idempotency_key",)},
+            {("obligation_id",), ("idempotency_key",),
+             ("id", "tenant_id", "expected_amount")},
         )
         columns = Payment.__table__.c
         self.assertIsInstance(columns.idempotency_key.type, PGUUID)

@@ -838,6 +838,7 @@ class Payment(IdentityColumns, Base):
     __table_args__ = (
         UniqueConstraint("obligation_id"),
         UniqueConstraint("idempotency_key"),
+        UniqueConstraint("id", "tenant_id", "expected_amount"),
         ForeignKeyConstraint(
             [
                 "obligation_id", "tenant_id", "offer_id",
@@ -940,3 +941,145 @@ class Payment(IdentityColumns, Base):
 
     # Serviço e migration futuros devem proteger valor, histórico e transições,
     # validar conta recebedora, consultar o provedor e conciliar reversões.
+
+
+class PaymentAttempt(IdentityColumns, Base):
+    """Tentativa inativa vinculada ao mesmo pagamento economico."""
+
+    __tablename__ = "payment_attempts"
+
+    __table_args__ = (
+        UniqueConstraint("payment_id", "attempt_number"),
+        UniqueConstraint("idempotency_key"),
+        UniqueConstraint("id", "payment_id", "tenant_id", "environment"),
+        ForeignKeyConstraint(
+            ["payment_id", "tenant_id", "expected_amount"],
+            ["payments.id", "payments.tenant_id", "payments.expected_amount"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("attempt_number > 0", name="attempt_number_positive"),
+        CheckConstraint(
+            "environment IN ('DEMO', 'HOMOLOGACAO', 'PRODUCAO')",
+            name="environment_valid",
+        ),
+        CheckConstraint(
+            "status = 'NAO_INICIADA_INATIVA'",
+            name="status_initial_only",
+        ),
+        CheckConstraint(
+            "provider IS NULL AND charge_ref IS NULL AND receiver_ref IS NULL",
+            name="initial_external_fields_absent",
+        ),
+        Index(
+            "ix_payment_attempts_tenant_payment_number",
+            "tenant_id", "payment_id", "attempt_number",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    payment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False
+    )
+    environment: Mapped[str] = mapped_column(String(16), nullable=False)
+    idempotency_key: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    charge_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    receiver_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="NAO_INICIADA_INATIVA",
+        server_default=text("'NAO_INICIADA_INATIVA'"),
+    )
+
+
+class PaymentReconciliationEvent(IdentityColumns, Base):
+    """Observacao registrada para conciliacao operacional futura."""
+
+    __tablename__ = "payment_reconciliation_events"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "environment", "observation_source", "event_key"
+        ),
+        ForeignKeyConstraint(
+            ["attempt_id", "payment_id", "tenant_id", "environment"],
+            [
+                "payment_attempts.id", "payment_attempts.payment_id",
+                "payment_attempts.tenant_id", "payment_attempts.environment",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "environment IN ('DEMO', 'HOMOLOGACAO', 'PRODUCAO')",
+            name="environment_valid",
+        ),
+        CheckConstraint("provider ~ '[^[:space:]]'", name="provider_nonblank"),
+        CheckConstraint(
+            "observation_source ~ '[^[:space:]]'",
+            name="observation_source_nonblank",
+        ),
+        CheckConstraint("event_key ~ '[^[:space:]]'", name="event_key_nonblank"),
+        CheckConstraint(
+            "provider_status ~ '[^[:space:]]'",
+            name="provider_status_nonblank",
+        ),
+        CheckConstraint(
+            "observed_currency IS NULL OR observed_currency ~ '[^[:space:]]'",
+            name="observed_currency_nonblank",
+        ),
+        CheckConstraint(
+            "observed_receiver_ref IS NULL OR observed_receiver_ref ~ '[^[:space:]]'",
+            name="observed_receiver_ref_nonblank",
+        ),
+        CheckConstraint(
+            "evidence_ref ~ '[^[:space:]]'",
+            name="evidence_ref_nonblank",
+        ),
+        CheckConstraint(
+            "octet_length(evidence_hash) = 32",
+            name="evidence_hash_sha256_length",
+        ),
+        CheckConstraint(
+            "status = 'REGISTRADO_NAO_CONCILIADO'",
+            name="status_initial_only",
+        ),
+        Index(
+            "ix_payment_reconciliation_events_tenant_payment_attempt",
+            "tenant_id", "payment_id", "attempt_id",
+        ),
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    payment_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    attempt_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    environment: Mapped[str] = mapped_column(String(16), nullable=False)
+    observation_source: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    observed_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 2), nullable=True
+    )
+    observed_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    observed_receiver_ref: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    observed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    evidence_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    evidence_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="REGISTRADO_NAO_CONCILIADO",
+        server_default=text("'REGISTRADO_NAO_CONCILIADO'"),
+    )
+
+    # Sem payload bruto ou efeito financeiro. Imutabilidade, replay e
+    # conciliacao de divergencias exigem PostgreSQL e servicos futuros.
