@@ -838,7 +838,7 @@ class Payment(IdentityColumns, Base):
     __table_args__ = (
         UniqueConstraint("obligation_id"),
         UniqueConstraint("idempotency_key"),
-        UniqueConstraint("id", "tenant_id", "expected_amount"),
+        UniqueConstraint("id", "tenant_id", "expected_amount", "environment"),
         ForeignKeyConstraint(
             [
                 "obligation_id", "tenant_id", "offer_id",
@@ -855,6 +855,10 @@ class Payment(IdentityColumns, Base):
         ),
         CheckConstraint("cycle_id IS NULL", name="license_cycle_absent"),
         CheckConstraint("expected_amount > 0", name="expected_amount_positive"),
+        CheckConstraint(
+            "environment IN ('DEMO', 'HOMOLOGACAO', 'PRODUCAO')",
+            name="environment_valid",
+        ),
         CheckConstraint(
             "confirmed_amount IS NULL OR confirmed_amount >= 0",
             name="confirmed_amount_nonnegative",
@@ -908,6 +912,7 @@ class Payment(IdentityColumns, Base):
     expected_amount: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False
     )
+    environment: Mapped[str] = mapped_column(String(16), nullable=False)
     confirmed_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(18, 2), nullable=True
     )
@@ -953,8 +958,11 @@ class PaymentAttempt(IdentityColumns, Base):
         UniqueConstraint("idempotency_key"),
         UniqueConstraint("id", "payment_id", "tenant_id", "environment"),
         ForeignKeyConstraint(
-            ["payment_id", "tenant_id", "expected_amount"],
-            ["payments.id", "payments.tenant_id", "payments.expected_amount"],
+            ["payment_id", "tenant_id", "expected_amount", "environment"],
+            [
+                "payments.id", "payments.tenant_id",
+                "payments.expected_amount", "payments.environment",
+            ],
             ondelete="RESTRICT",
         ),
         CheckConstraint("attempt_number > 0", name="attempt_number_positive"),

@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKeyConstraint,
     Numeric,
+    String,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, dialect
@@ -59,8 +60,8 @@ class LicenseObligationPaymentSchemaTests(unittest.TestCase):
             (Payment, {
                 "id", "created_at", "updated_at", "tenant_id", "cycle_id",
                 "obligation_id", "offer_id", "price_version_id",
-                "expected_amount", "confirmed_amount", "currency", "purpose",
-                "receiver_domain", "idempotency_key", "provider", "external_id",
+                "expected_amount", "environment", "confirmed_amount",
+                "currency", "purpose", "receiver_domain", "idempotency_key", "provider", "external_id",
                 "receiver_ref", "confirmed_at", "evidence_ref", "status",
             }),
         )
@@ -155,7 +156,7 @@ class LicenseObligationPaymentSchemaTests(unittest.TestCase):
         self.assertEqual(
             self.uniques(Payment.__table__),
             {("obligation_id",), ("idempotency_key",),
-             ("id", "tenant_id", "expected_amount")},
+             ("id", "tenant_id", "expected_amount", "environment")},
         )
         columns = Payment.__table__.c
         self.assertIsInstance(columns.idempotency_key.type, PGUUID)
@@ -174,6 +175,11 @@ class LicenseObligationPaymentSchemaTests(unittest.TestCase):
             )
             self.assertTrue(column.type.asdecimal)
         self.assertFalse(columns.expected_amount.nullable)
+        self.assertIsInstance(columns.environment.type, String)
+        self.assertEqual(columns.environment.type.length, 16)
+        self.assertFalse(columns.environment.nullable)
+        self.assertIsNone(columns.environment.default)
+        self.assertIsNone(columns.environment.server_default)
         self.assertTrue(columns.confirmed_amount.nullable)
         for name in (
             "provider", "external_id", "receiver_ref", "confirmed_at",
@@ -193,6 +199,8 @@ class LicenseObligationPaymentSchemaTests(unittest.TestCase):
         for name, expected in (
             ("license_cycle_absent", "cycle_id IS NULL"),
             ("expected_amount_positive", "expected_amount > 0"),
+            ("environment_valid",
+             "environment IN ('DEMO', 'HOMOLOGACAO', 'PRODUCAO')"),
             ("confirmed_amount_nonnegative",
              "confirmed_amount IS NULL OR confirmed_amount >= 0"),
             ("currency_brl", "currency = 'BRL'"),
@@ -261,7 +269,10 @@ class LicenseObligationPaymentSchemaTests(unittest.TestCase):
             )),
             (Payment, (
                 "expected_amount NUMERIC(18, 2) NOT NULL",
+                "environment VARCHAR(16) NOT NULL",
                 "confirmed_amount NUMERIC(18, 2)",
+                "UNIQUE (id, tenant_id, expected_amount, environment)",
+                "environment IN ('DEMO', 'HOMOLOGACAO', 'PRODUCAO')",
                 "idempotency_key UUID NOT NULL",
                 "confirmed_at TIMESTAMP WITH TIME ZONE",
                 "status VARCHAR(32) DEFAULT 'NAO_INICIADO_INATIVO' NOT NULL",
