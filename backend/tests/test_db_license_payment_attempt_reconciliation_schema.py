@@ -93,7 +93,7 @@ class PaymentAttemptReconciliationSchemaTests(unittest.TestCase):
 
     def test_environment_domain_matches_approved_contract(self):
         approved = ("DEMO", "HOMOLOGACAO", "PRODUCAO")
-        for model in (PaymentAttempt, PaymentReconciliationEvent):
+        for model in (Payment, PaymentAttempt, PaymentReconciliationEvent):
             with self.subTest(model=model.__name__):
                 check = self.checks(model.__table__)[
                     f"ck_{model.__tablename__}_environment_valid"
@@ -109,13 +109,14 @@ class PaymentAttemptReconciliationSchemaTests(unittest.TestCase):
 
     def test_payment_changes_only_by_parent_composite_key(self):
         self.assertIn(
-            ("id", "tenant_id", "expected_amount"),
+            ("id", "tenant_id", "expected_amount", "environment"),
             self.uniques(Payment.__table__),
         )
         self.assertEqual(
             self.foreign_keys(PaymentAttempt.__table__),
-            {("payment_id", "tenant_id", "expected_amount"): (
-                ("payments.id", "payments.tenant_id", "payments.expected_amount"),
+            {("payment_id", "tenant_id", "expected_amount", "environment"): (
+                ("payments.id", "payments.tenant_id",
+                 "payments.expected_amount", "payments.environment"),
                 "RESTRICT",
             )},
         )
@@ -203,19 +204,34 @@ class PaymentAttemptReconciliationSchemaTests(unittest.TestCase):
         for name in ("attempt_id", "payment_id", "tenant_id", "environment"):
             self.assertFalse(PaymentReconciliationEvent.__table__.c[name].nullable)
 
-    def test_attempt_payment_link_rejects_cross_tenant_and_amount_at_ddl_level(self):
-        payment_id, tenant_id = uuid4(), uuid4()
-        parent = (payment_id, tenant_id, Decimal("49.90"))
-        cases = (
-            (parent, True),
-            ((uuid4(), tenant_id, Decimal("49.90")), False),
-            ((payment_id, uuid4(), Decimal("49.90")), False),
-            ((payment_id, tenant_id, Decimal("49.91")), False),
+    def test_attempt_payment_link_rejects_cross_scope_at_ddl_level(self):
+        self.assertEqual(
+            self.foreign_keys(PaymentAttempt.__table__),
+            {("payment_id", "tenant_id", "expected_amount", "environment"): (
+                ("payments.id", "payments.tenant_id",
+                 "payments.expected_amount", "payments.environment"),
+                "RESTRICT",
+            )},
         )
-        for child, matches in cases:
-            with self.subTest(child=child):
-                self.assertEqual(child == parent, matches)
-        for name in ("payment_id", "tenant_id", "expected_amount"):
+        payment_id, tenant_id = uuid4(), uuid4()
+        amount = Decimal("49.90")
+        approved = ("DEMO", "HOMOLOGACAO", "PRODUCAO")
+        for environment in approved:
+            parent = (payment_id, tenant_id, amount, environment)
+            cases = (
+                (parent, True),
+                ((uuid4(), tenant_id, amount, environment), False),
+                ((payment_id, uuid4(), amount, environment), False),
+                ((payment_id, tenant_id, Decimal("49.91"), environment), False),
+            ) + tuple(
+                ((payment_id, tenant_id, amount, other), False)
+                for other in approved if other != environment
+            )
+            for child, matches in cases:
+                with self.subTest(parent=parent, child=child):
+                    self.assertEqual(child == parent, matches)
+        # A FK composta e os NOT NULL sao a garantia DDL; nao ha INSERT aqui.
+        for name in ("payment_id", "tenant_id", "expected_amount", "environment"):
             self.assertFalse(PaymentAttempt.__table__.c[name].nullable)
 
     def test_attempt_number_key_and_event_deduplication_scopes(self):
@@ -343,14 +359,17 @@ class PaymentAttemptReconciliationSchemaTests(unittest.TestCase):
 
         cases = (
             (Payment, (
-                "UNIQUE (id, tenant_id, expected_amount)",
+                "environment VARCHAR(16) NOT NULL",
+                "UNIQUE (id, tenant_id, expected_amount, environment)",
+                "environment IN ('DEMO', 'HOMOLOGACAO', 'PRODUCAO')",
             )),
             (PaymentAttempt, (
                 "expected_amount NUMERIC(18, 2) NOT NULL",
                 "idempotency_key UUID NOT NULL",
                 "status VARCHAR(32) DEFAULT 'NAO_INICIADA_INATIVA' NOT NULL",
-                "FOREIGN KEY(payment_id, tenant_id, expected_amount)",
-                "REFERENCES payments (id, tenant_id, expected_amount) "
+                "FOREIGN KEY(payment_id, tenant_id, expected_amount, environment)",
+                "REFERENCES payments (id, tenant_id, expected_amount, "
+                "environment) "
                 "ON DELETE RESTRICT",
                 "UNIQUE (payment_id, attempt_number)",
             )),
