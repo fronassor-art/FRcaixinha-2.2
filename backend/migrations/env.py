@@ -7,13 +7,14 @@ from alembic import context
 from sqlalchemy import create_engine, pool, text
 from sqlalchemy.engine import make_url
 
+from app.db.models import Base
+
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Modelos serao vinculados em uma etapa posterior.
-target_metadata = None
+target_metadata = Base.metadata
 
 EXPECTED_DATABASE = "frcaixinha_2_2_dev"
 EXPECTED_USERNAME = "frc22_owner"
