@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from getpass import getpass
-from unittest.mock import patch
 
 import pg_migration_trial_executor as trial
 
@@ -36,10 +35,10 @@ def main() -> int:
         return 2
 
     if (
-        trial.APPROVED_SCHEMA_TRIAL_TARGET is not None
-        or trial.APPROVED_SCHEMA_TRIAL_CHECKPOINT is not None
+        trial.APPROVED_SCHEMA_TRIAL_TARGET != TARGET
+        or trial.APPROVED_SCHEMA_TRIAL_CHECKPOINT != CHECKPOINT
     ):
-        print("BLOCKED: executor original não está desabilitado.")
+        print("BLOCKED: autorização interna não aprovada.")
         return 2
 
     print("ATENÇÃO: ensaio real no PostgreSQL autoritativo.")
@@ -62,21 +61,12 @@ def main() -> int:
         target=TARGET,
     )
 
-    # Autorização limitada à chamada, neste processo independente.
-    with (
-        patch.object(
-            trial, "APPROVED_SCHEMA_TRIAL_TARGET", TARGET
-        ),
-        patch.object(
-            trial, "APPROVED_SCHEMA_TRIAL_CHECKPOINT",
-            CHECKPOINT,
-        ),
-    ):
-        result = trial.run_schema_trial(
-            target=TARGET,
-            authorization=authorization,
-            trial_password=password,
-        )
+    # Exige autorizacao independente, revisada no executor.
+    result = trial.run_schema_trial(
+        target=TARGET,
+        authorization=authorization,
+        trial_password=password,
+    )
 
     expected = trial.TrialResult(
         upgrades=(trial.C15_REVISION, trial.C16_REVISION),

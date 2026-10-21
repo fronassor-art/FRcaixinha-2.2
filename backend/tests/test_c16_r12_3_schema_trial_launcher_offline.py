@@ -36,8 +36,35 @@ class SchemaTrialLauncherOfflineTests(unittest.TestCase):
             self.assertEqual(launcher.main(), 2)
             engine.assert_not_called()
 
+
+    def test_execute_without_internal_approval_is_blocked(self):
+        with (
+            patch.object(sys, "argv", ["launcher", "--execute"]),
+            patch("builtins.input") as confirmation,
+            patch.object(self.trial, "run_schema_trial") as runner,
+            patch.object(launcher, "getpass") as password,
+            patch.object(
+                self.trial.sqlalchemy, "create_engine"
+            ) as engine,
+        ):
+            self.assertEqual(launcher.main(), 2)
+            confirmation.assert_not_called()
+            password.assert_not_called()
+            runner.assert_not_called()
+            engine.assert_not_called()
+
     def test_wrong_checkpoint_is_blocked(self):
         with (
+            patch.object(
+                self.trial,
+                "APPROVED_SCHEMA_TRIAL_TARGET",
+                launcher.TARGET,
+            ),
+            patch.object(
+                self.trial,
+                "APPROVED_SCHEMA_TRIAL_CHECKPOINT",
+                launcher.CHECKPOINT,
+            ),
             patch.object(
                 sys, "argv", ["launcher", "--execute"]
             ),
@@ -53,6 +80,16 @@ class SchemaTrialLauncherOfflineTests(unittest.TestCase):
 
     def test_empty_password_is_blocked(self):
         with (
+            patch.object(
+                self.trial,
+                "APPROVED_SCHEMA_TRIAL_TARGET",
+                launcher.TARGET,
+            ),
+            patch.object(
+                self.trial,
+                "APPROVED_SCHEMA_TRIAL_CHECKPOINT",
+                launcher.CHECKPOINT,
+            ),
             patch.object(
                 sys, "argv", ["launcher", "--execute"]
             ),
@@ -101,6 +138,16 @@ class SchemaTrialLauncherOfflineTests(unittest.TestCase):
 
         with (
             patch.object(
+                self.trial,
+                "APPROVED_SCHEMA_TRIAL_TARGET",
+                launcher.TARGET,
+            ),
+            patch.object(
+                self.trial,
+                "APPROVED_SCHEMA_TRIAL_CHECKPOINT",
+                launcher.CHECKPOINT,
+            ),
+            patch.object(
                 sys, "argv", ["launcher", "--execute"]
             ),
             patch(
@@ -125,6 +172,16 @@ class SchemaTrialLauncherOfflineTests(unittest.TestCase):
 
     def test_failure_restores_gates(self):
         with (
+            patch.object(
+                self.trial,
+                "APPROVED_SCHEMA_TRIAL_TARGET",
+                launcher.TARGET,
+            ),
+            patch.object(
+                self.trial,
+                "APPROVED_SCHEMA_TRIAL_CHECKPOINT",
+                launcher.CHECKPOINT,
+            ),
             patch.object(
                 sys, "argv", ["launcher", "--execute"]
             ),
