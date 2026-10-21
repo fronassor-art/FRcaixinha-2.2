@@ -1,9 +1,10 @@
-"""Acionador C16-R12.3: exige autorização separada para execução real."""
+"""Acionador C16-R12.5; execução real exige autorização operacional separada."""
 
 from __future__ import annotations
 
 import argparse
 from getpass import getpass
+from threading import Lock
 
 import pg_migration_trial_executor as trial
 
@@ -17,6 +18,7 @@ TARGET = trial.SchemaTrialTarget(
 )
 
 CHECKPOINT = "C16-R12.3-SCHEMA-20261021"
+_AUTHORIZATION_LOCK = Lock()
 
 
 def main() -> int:
@@ -28,13 +30,28 @@ def main() -> int:
         action="store_true",
         help="Solicitar execução após autorização separada.",
     )
+    parser.add_argument(
+        "--authorize-checkpoint",
+        help="Checkpoint exato, somente após autorização operacional separada.",
+    )
     args = parser.parse_args()
 
     if not args.execute:
         print("BLOCKED: execução desabilitada por padrão.")
         return 2
 
-    if (
+    scoped = args.authorize_checkpoint is not None
+    if scoped:
+        if args.authorize_checkpoint != CHECKPOINT:
+            print("BLOCKED: argumento de autorização divergente.")
+            return 2
+        if (
+            trial.APPROVED_SCHEMA_TRIAL_TARGET is not None
+            or trial.APPROVED_SCHEMA_TRIAL_CHECKPOINT is not None
+        ):
+            print("BLOCKED: autorização interna já configurada.")
+            return 2
+    elif (
         trial.APPROVED_SCHEMA_TRIAL_TARGET != TARGET
         or trial.APPROVED_SCHEMA_TRIAL_CHECKPOINT != CHECKPOINT
     ):
@@ -56,24 +73,47 @@ def main() -> int:
         print("BLOCKED: senha de ensaio ausente.")
         return 2
 
+    if not scoped:
+        return _invoke_trial(password)
+
+    # Standalone CLI only: never install permanent approvals or read credentials
+    # from the environment. No approval is installed while prompting the user.
+    if not _AUTHORIZATION_LOCK.acquire(blocking=False):
+        print("BLOCKED: autorização de ensaio já em uso.")
+        return 2
+    try:
+        if (
+            trial.APPROVED_SCHEMA_TRIAL_TARGET is not None
+            or trial.APPROVED_SCHEMA_TRIAL_CHECKPOINT is not None
+        ):
+            print("BLOCKED: autorização interna mudou durante a confirmação.")
+            return 2
+        try:
+            trial.APPROVED_SCHEMA_TRIAL_TARGET = TARGET
+            trial.APPROVED_SCHEMA_TRIAL_CHECKPOINT = CHECKPOINT
+            return _invoke_trial(password)
+        finally:
+            trial.APPROVED_SCHEMA_TRIAL_TARGET = None
+            trial.APPROVED_SCHEMA_TRIAL_CHECKPOINT = None
+    finally:
+        _AUTHORIZATION_LOCK.release()
+
+
+def _invoke_trial(password: str) -> int:
     authorization = trial.SchemaTrialAuthorization(
         checkpoint=CHECKPOINT,
         target=TARGET,
     )
-
-    # Exige autorizacao independente, revisada no executor.
     result = trial.run_schema_trial(
         target=TARGET,
         authorization=authorization,
         trial_password=password,
     )
-
     expected = trial.TrialResult(
         upgrades=(trial.C15_REVISION, trial.C16_REVISION),
         downgrades=(trial.C16_REVISION, trial.C15_REVISION),
         rolled_back=True,
     )
-
     if result != expected:
         raise RuntimeError("Resultado do ensaio divergente.")
 
