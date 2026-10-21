@@ -471,3 +471,18 @@ O número ADR identifica a decisão para referência obrigatória em cada novo c
 | 1.1 | 20/10/2026 | Atualiza G2 e estado até C15; acrescenta inventário, PRs, ADRs, ERRs, fluxo Codex→Termux, backups, gates e protocolo novo chat | PRs #1–#17, CI 89/89, Termux e backup Drive C15 | **Documento preparado; publicação no repositório oficial ainda requer checkpoint de documentação** |
 
 **CONTROLE FINAL V1.1:** este documento é instrução operacional, não altera o Contrato Técnico Mestre de 16/10. Não autoriza novas migrations, Pix, dinheiro real, políticas ou custos. **Nenhum erro conhecido deve ser rediagnosticado sem consulta ao histórico e evidência de alteração de causa.**
+
+
+## Atualização de continuidade — C16-R12.5 (21/10/2026)
+
+Este adendo prevalece sobre a fotografia de status de 20/10 acima, preservada
+como histórico. A base main desta revisão é 499f9f1bfd891def8bf11596538db367f7a7ee19
+(PR #21); Fase 2 em andamento, Fase 3 não iniciada. Auditorias READ ONLY
+C16-R12.4.1/.2 PASS; 52 testes offline C16-R12.4.6 PASS. Backups PostgreSQL e papéis
+atualizados, criptografados, lidos e copiados ao Drive privado com comparação de
+bytes/SHA PASS. Restauração funcional e ensaio real PostgreSQL continuam NOT_RUN.
+C16-R12.5 implementa apenas habilitação temporária e testes, em revisão/CI;
+não autoriza DDL, merge ou aplicação permanente das migrations.
+ADR, ERR corrigido, hashes, evidências, limites e próximo gate estão em
+[checkpoint C16-R12.5](FRcaixinha_2_2_C16_R12_5_Habilitacao_Controlada_2026-10-21.md).
+Resultado do CI desta alteração deve ser lido no job do HEAD da PR, não presumido.

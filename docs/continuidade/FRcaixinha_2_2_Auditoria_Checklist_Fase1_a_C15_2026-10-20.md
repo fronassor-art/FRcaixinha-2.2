@@ -141,3 +141,18 @@ Não iniciar recursos financeiros reais nem considerar o plano de 60 dias transc
 - [ ] Checar integração Codex Cloud/Termux apenas em checkpoint próprio; estado Cloud ainda PENDENTE.
 
 **STATUS GERAL:** Fase 1 BASE INTEGRADA; Fase 2 EM ANDAMENTO; código até C15 integrado e validado offline/CI; Git backup local/remoto verificado; banco PG18 existente sem migration; futura aplicação SQL NÃO AUTORIZADA.
+
+
+## Atualização de continuidade — C16-R12.5 (21/10/2026)
+
+Este adendo prevalece sobre a fotografia de status de 20/10 acima, preservada
+como histórico. A base main desta revisão é 499f9f1bfd891def8bf11596538db367f7a7ee19
+(PR #21); Fase 2 em andamento, Fase 3 não iniciada. Auditorias READ ONLY
+C16-R12.4.1/.2 PASS; 52 testes offline C16-R12.4.6 PASS. Backups PostgreSQL e papéis
+atualizados, criptografados, lidos e copiados ao Drive privado com comparação de
+bytes/SHA PASS. Restauração funcional e ensaio real PostgreSQL continuam NOT_RUN.
+C16-R12.5 implementa apenas habilitação temporária e testes, em revisão/CI;
+não autoriza DDL, merge ou aplicação permanente das migrations.
+ADR, ERR corrigido, hashes, evidências, limites e próximo gate estão em
+[checkpoint C16-R12.5](FRcaixinha_2_2_C16_R12_5_Habilitacao_Controlada_2026-10-21.md).
+Resultado do CI desta alteração deve ser lido no job do HEAD da PR, não presumido.

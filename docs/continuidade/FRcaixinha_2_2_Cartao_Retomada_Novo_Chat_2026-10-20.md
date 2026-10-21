@@ -31,3 +31,18 @@
 **Próxima pendência IMEDIATA:** versionar **a atualização documental v1.1 e este cartão** por revisão Git própria no mesmo repositório (nenhum código/SQL); ainda não publicado na `main`. Só então discutir C16 auditoria pré-migration PostgreSQL somente leitura; upgrade/downgrade e qualquer DDL requerem autorização separada.
 
 **Protocolo no novo chat:** confirmar acesso aos três documentos, citar último SHA, checar se houve checkpoint posterior e **não oferecer reinstalação, nova base, recuperação ou pesquisa repetida sem causa nova documentada**. Validar contratualmente qualquer nova proposta.
+
+
+## Atualização de continuidade — C16-R12.5 (21/10/2026)
+
+Este adendo prevalece sobre a fotografia de status de 20/10 acima, preservada
+como histórico. A base main desta revisão é 499f9f1bfd891def8bf11596538db367f7a7ee19
+(PR #21); Fase 2 em andamento, Fase 3 não iniciada. Auditorias READ ONLY
+C16-R12.4.1/.2 PASS; 52 testes offline C16-R12.4.6 PASS. Backups PostgreSQL e papéis
+atualizados, criptografados, lidos e copiados ao Drive privado com comparação de
+bytes/SHA PASS. Restauração funcional e ensaio real PostgreSQL continuam NOT_RUN.
+C16-R12.5 implementa apenas habilitação temporária e testes, em revisão/CI;
+não autoriza DDL, merge ou aplicação permanente das migrations.
+ADR, ERR corrigido, hashes, evidências, limites e próximo gate estão em
+[checkpoint C16-R12.5](FRcaixinha_2_2_C16_R12_5_Habilitacao_Controlada_2026-10-21.md).
+Resultado do CI desta alteração deve ser lido no job do HEAD da PR, não presumido.
