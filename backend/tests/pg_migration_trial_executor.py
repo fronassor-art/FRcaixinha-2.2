@@ -1,9 +1,10 @@
 """Guarded C15/C16 trial runner; importing this module never opens a database.
 
-This module is deliberately disabled. A later, separately reviewed change must
-pin both approval constants to a disposable database and a checkpoint. Only
-a private, short-lived trial connection is acquired after those gates pass.
-This module does not create databases or read production credentials.
+Both trial modes are deliberately disabled. Separate, reviewed changes must
+pin the destination and checkpoint for either a disposable database or an
+isolated schema inside the single authoritative database. A private connection
+is acquired only after the selected mode's gates pass. No credential is read
+automatically and this module does not create a database.
 """
 
 from __future__ import annotations
@@ -30,6 +31,9 @@ from sqlalchemy.pool import NullPool
 AUTHORITATIVE_DATABASE = "frcaixinha_2_2_dev"
 TRIAL_DATABASE_PREFIX = "frcaixinha_2_2_c16_trial_"
 TRIAL_ROLE_PREFIX = "frc22_trial_"
+AUTHORITATIVE_ROLE = "frc22_owner"
+SCHEMA_TRIAL_ROLE_PREFIX = "frc22_trial_"
+SCHEMA_TRIAL_PREFIX = "frc22_c16_trial_"
 C15_REVISION = "c15r2_20261020"
 C16_REVISION = "c16r5_20261020"
 C15_TABLES = (
@@ -72,6 +76,21 @@ class TrialAuthorization:
 
 
 @dataclass(frozen=True, slots=True)
+class SchemaTrialTarget:
+    host: str
+    port: int
+    database: str
+    role: str
+    schema: str
+
+
+@dataclass(frozen=True, slots=True)
+class SchemaTrialAuthorization:
+    checkpoint: str
+    target: SchemaTrialTarget
+
+
+@dataclass(frozen=True, slots=True)
 class TrialResult:
     upgrades: tuple[str, str]
     downgrades: tuple[str, str]
@@ -86,6 +105,8 @@ class TrialBlocked(RuntimeError):
 # They must be pinned by a separately authorized, reviewed code change.
 APPROVED_TRIAL_TARGET: TrialTarget | None = None
 APPROVED_TRIAL_CHECKPOINT: str | None = None
+APPROVED_SCHEMA_TRIAL_TARGET: SchemaTrialTarget | None = None
+APPROVED_SCHEMA_TRIAL_CHECKPOINT: str | None = None
 
 
 _IDENTITY_SQL = text(
@@ -104,6 +125,45 @@ _RELATIONS_SQL = text(
     "AND n.nspname NOT LIKE 'pg_temp_%' "
     "AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f', 'i', 'I') "
     "ORDER BY n.nspname, c.relname"
+)
+
+_SCHEMAS_SQL = text(
+    "SELECT nspname FROM pg_catalog.pg_namespace "
+    "WHERE nspname NOT IN ('pg_catalog', 'information_schema') "
+    "AND nspname NOT LIKE 'pg_toast%' AND nspname NOT LIKE 'pg_temp_%'"
+)
+_ROLE_SQL = text(
+    "SELECT rolcanlogin, rolcreaterole, rolreplication, rolbypassrls, "
+    "has_database_privilege(current_user, current_database(), 'CONNECT'), "
+    "has_database_privilege(current_user, current_database(), 'CREATE'), "
+    "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace n "
+    "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') "
+    "AND n.nspname NOT LIKE 'pg_toast%' AND n.nspname NOT LIKE 'pg_temp_%' "
+    "AND has_schema_privilege(current_user, n.oid, 'CREATE')), "
+    "NOT pg_catalog.pg_has_role(current_user, 'frc22_owner', 'MEMBER') "
+    "FROM pg_catalog.pg_roles WHERE rolname = current_user"
+)
+_CONSTRAINTS_SQL = text(
+    "SELECT n.nspname, c.conname, c.contype FROM pg_catalog.pg_constraint c "
+    "JOIN pg_catalog.pg_namespace n ON n.oid = c.connamespace "
+    "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') "
+    "AND n.nspname NOT LIKE 'pg_toast%' AND n.nspname NOT LIKE 'pg_temp_%' "
+    "ORDER BY n.nspname, c.conname"
+)
+_PATH_SQL = text(
+    "SELECT pg_catalog.current_schema(), "
+    "pg_catalog.current_setting('search_path'), "
+    "pg_catalog.current_schemas(true)"
+)
+_SET_PATH_SQL = text("SELECT pg_catalog.set_config('search_path', :path, true)")
+_FKS_SQL = text(
+    "SELECT source_ns.nspname, target_ns.nspname FROM pg_catalog.pg_constraint c "
+    "JOIN pg_catalog.pg_class source ON source.oid = c.conrelid "
+    "JOIN pg_catalog.pg_namespace source_ns ON source_ns.oid = source.relnamespace "
+    "JOIN pg_catalog.pg_class target ON target.oid = c.confrelid "
+    "JOIN pg_catalog.pg_namespace target_ns ON target_ns.oid = target.relnamespace "
+    "WHERE c.contype = 'f' AND (source_ns.nspname = :schema "
+    "OR target_ns.nspname = :schema)"
 )
 
 
@@ -131,6 +191,35 @@ def _validate_request(target: TrialTarget, authorization: TrialAuthorization) ->
         or authorization.checkpoint != APPROVED_TRIAL_CHECKPOINT
     ):
         raise TrialBlocked("specific trial authorization is absent or mismatched")
+
+
+def _validate_schema_request(
+    target: SchemaTrialTarget, authorization: SchemaTrialAuthorization
+) -> None:
+    if type(target) is not SchemaTrialTarget:
+        raise TrialBlocked("schema trial target is required")
+    if (
+        target.host != "127.0.0.1" or type(target.port) is not int
+        or target.port != 5432 or target.database != AUTHORITATIVE_DATABASE
+        or type(target.role) is not str
+        or not re.fullmatch(
+            rf"{SCHEMA_TRIAL_ROLE_PREFIX}[a-z][a-z0-9_]{{0,30}}", target.role
+        )
+        or type(target.schema) is not str
+        or not re.fullmatch(
+            rf"{SCHEMA_TRIAL_PREFIX}[a-z][a-z0-9_]{{0,30}}", target.schema
+        )
+    ):
+        raise TrialBlocked("schema trial destination is invalid")
+    if APPROVED_SCHEMA_TRIAL_TARGET is None or target != APPROVED_SCHEMA_TRIAL_TARGET:
+        raise TrialBlocked("schema trial destination has no separate approval")
+    if (
+        APPROVED_SCHEMA_TRIAL_CHECKPOINT is None
+        or type(authorization) is not SchemaTrialAuthorization
+        or authorization.target != target
+        or authorization.checkpoint != APPROVED_SCHEMA_TRIAL_CHECKPOINT
+    ):
+        raise TrialBlocked("specific schema trial authorization is absent or mismatched")
 
 
 def _sha256_file(path: Path) -> str:
@@ -230,11 +319,11 @@ def _require_active_transaction(connection: SQLAlchemyConnection, driver: Psycop
         raise TrialBlocked("trial transaction inspection failed") from None
 
 
-def _validate_identity(row, target: TrialTarget) -> None:
+def _validate_identity(row, target: TrialTarget | SchemaTrialTarget) -> None:
     if row is None or len(row) != 9:
         raise TrialBlocked("PostgreSQL identity is unavailable")
     database, role, host, port, version, superuser, createdb, recovery, read_only = row
-    if database == AUTHORITATIVE_DATABASE:
+    if database == AUTHORITATIVE_DATABASE and type(target) is not SchemaTrialTarget:
         raise TrialBlocked("authoritative database is forbidden")
     if (database, role, host, port) != (
         target.database, target.role, target.host, target.port
@@ -271,6 +360,82 @@ def _require_tables(relations, expected: tuple[str, ...]) -> None:
         or any(schema != "public" for schema, _, _ in relations)
     ):
         raise TrialBlocked("trial schema differs from the expected migration stage")
+
+
+def _schema_names(connection) -> frozenset[str]:
+    rows = connection.execute(_SCHEMAS_SQL).all()
+    if any(len(row) != 1 or type(row[0]) is not str for row in rows):
+        raise TrialBlocked("schema inventory is malformed")
+    return frozenset(row[0] for row in rows)
+
+
+def _constraints(connection) -> tuple[tuple[str, str, str], ...]:
+    rows = connection.execute(_CONSTRAINTS_SQL).all()
+    try:
+        constraints = tuple(tuple(row) for row in rows)
+    except (TypeError, ValueError) as exc:
+        raise TrialBlocked("constraint inventory is unavailable") from exc
+    if any(
+        len(row) != 3 or any(type(value) is not str for value in row)
+        for row in constraints
+    ):
+        raise TrialBlocked("constraint inventory is malformed")
+    return constraints
+
+
+def _validate_schema_role(connection) -> None:
+    row = connection.execute(_ROLE_SQL).one_or_none()
+    if row is None or len(row) != 8 or tuple(row) != (
+        True, False, False, False, True, True, True, True
+    ):
+        raise TrialBlocked("schema trial role lacks verified required capabilities")
+
+
+def _require_schema_path(connection, schema: str) -> None:
+    row = connection.execute(_PATH_SQL).one_or_none()
+    expected_path = f"{schema}, pg_catalog, pg_temp"
+    if row is None or len(row) != 3:
+        raise TrialBlocked("schema trial search path is unavailable")
+    current, configured, effective = row
+    if (
+        current != schema or configured != expected_path
+        or not isinstance(effective, (list, tuple))
+        or not effective or effective[0] != schema
+        or effective.count(schema) != 1
+        or effective.count("pg_catalog") != 1
+        or any(
+            name not in (schema, "pg_catalog")
+            and not (type(name) is str and re.fullmatch(r"pg_temp_[0-9]+", name))
+            for name in effective
+        )
+    ):
+        raise TrialBlocked("schema trial search path escaped isolation")
+
+
+def _require_schema_stage(
+    connection, schema: str, expected: tuple[str, ...],
+    original_relations: tuple[tuple[str, str, str], ...],
+    original_constraints: tuple[tuple[str, str, str], ...],
+    original_schemas: frozenset[str],
+) -> None:
+    _require_schema_path(connection, schema)
+    if _schema_names(connection) != original_schemas | {schema}:
+        raise TrialBlocked("schema inventory changed outside the trial")
+    relations = _relations(connection)
+    if tuple(row for row in relations if row[0] != schema) != original_relations:
+        raise TrialBlocked("relations changed outside the trial schema")
+    constraints = _constraints(connection)
+    if tuple(row for row in constraints if row[0] != schema) != original_constraints:
+        raise TrialBlocked("constraints changed outside the trial schema")
+    tables = {name for owner, name, kind in relations
+              if owner == schema and kind in ("r", "p")}
+    if tables != set(expected):
+        raise TrialBlocked("trial tables differ from the migration stage")
+    if not expected and any(owner == schema for owner, _, _ in relations):
+        raise TrialBlocked("trial schema contains residual relations")
+    fks = connection.execute(_FKS_SQL, {"schema": schema}).all()
+    if any(len(row) != 2 or tuple(row) != (schema, schema) for row in fks):
+        raise TrialBlocked("foreign key escaped the trial schema")
 
 
 def _isolated_revision_function(revision: ModuleType, method: str, operations: Operations) -> FunctionType:
@@ -321,8 +486,44 @@ def _isolated_revision_function(revision: ModuleType, method: str, operations: O
     return FunctionType(code, private_globals, source.__name__)
 
 
+class _CheckedOperations:
+    """Check the private transaction immediately before every frozen DDL call."""
+
+    _METHODS = frozenset({
+        "execute", "create_unique_constraint", "create_table", "create_index",
+        "drop_index", "drop_table", "drop_constraint",
+    })
+
+    def __init__(self, operations: Operations, check):
+        self._operations = operations
+        self._check = check
+
+    def __getattr__(self, name: str):
+        if name not in self._METHODS:
+            raise TrialBlocked("unapproved migration operation")
+        operation = getattr(self._operations, name)
+
+        def guarded(*args, **kwargs):
+            self._check()
+            return operation(*args, **kwargs)
+
+        return guarded
+
+
 def _invoke(revision, method: str, operations: Operations) -> None:
     _isolated_revision_function(revision, method, operations)()
+
+
+def _run_revision_sequence(c15, c16, operations, check_before, check_after) -> None:
+    for revision, method, expected in (
+        (c15, "upgrade", C15_TABLES),
+        (c16, "upgrade", C16_TABLES),
+        (c16, "downgrade", C15_TABLES),
+        (c15, "downgrade", ()),
+    ):
+        check_before()
+        _invoke(revision, method, operations)
+        check_after(expected)
 
 
 def run_trial(*, target: TrialTarget, authorization: TrialAuthorization, trial_password: str) -> TrialResult:
@@ -354,19 +555,19 @@ def run_trial(*, target: TrialTarget, authorization: TrialAuthorization, trial_p
 
                 context = MigrationContext.configure(connection=connection)
                 operations = Operations(context)
+
+                def check_transaction():
+                    _require_active_transaction(connection, driver)
+
+                guarded = _CheckedOperations(operations, check_transaction)
+
+                def check_stage(expected):
+                    _require_tables(_relations(connection), expected)
+
                 with _REVISION_BINDING_LOCK:
-                    _require_active_transaction(connection, driver)
-                    _invoke(c15, "upgrade", operations)
-                    _require_tables(_relations(connection), C15_TABLES)
-                    _require_active_transaction(connection, driver)
-                    _invoke(c16, "upgrade", operations)
-                    _require_tables(_relations(connection), C16_TABLES)
-                    _require_active_transaction(connection, driver)
-                    _invoke(c16, "downgrade", operations)
-                    _require_tables(_relations(connection), C15_TABLES)
-                    _require_active_transaction(connection, driver)
-                    _invoke(c15, "downgrade", operations)
-                    _require_tables(_relations(connection), ())
+                    _run_revision_sequence(
+                        c15, c16, guarded, check_transaction, check_stage
+                    )
                 return TrialResult(
                     upgrades=(C15_REVISION, C16_REVISION),
                     downgrades=(C16_REVISION, C15_REVISION),
@@ -374,5 +575,165 @@ def run_trial(*, target: TrialTarget, authorization: TrialAuthorization, trial_p
                 )
             finally:
                 transaction.rollback()
+    finally:
+        engine.dispose()
+
+
+def _post_rollback_catalog_errors(
+    connection: SQLAlchemyConnection, driver: PsycopgConnection,
+    original_schemas: frozenset[str],
+    original_relations: tuple[tuple[str, str, str], ...],
+    original_constraints: tuple[tuple[str, str, str], ...],
+) -> tuple[Exception | None, Exception | None]:
+    """Inspect after a confirmed rollback and close the read-only audit transaction."""
+    inventory_error = None
+    audit_rollback_error = None
+    try:
+        if (
+            connection.closed is not False
+            or connection.invalidated is not False
+            or connection.in_transaction() is not False
+            or connection.connection.driver_connection is not driver
+            or driver.autocommit is not False
+            or driver.info.transaction_status is not TransactionStatus.IDLE
+        ):
+            raise TrialBlocked("post-rollback connection state is unverified")
+        if (
+            _schema_names(connection) != original_schemas
+            or _relations(connection) != original_relations
+            or _constraints(connection) != original_constraints
+        ):
+            raise TrialBlocked("schema trial left catalog residue")
+    except Exception as exc:
+        inventory_error = exc
+    try:
+        # Catalog SELECTs may have opened a new implicit SQLAlchemy transaction.
+        connection.rollback()
+    except Exception as exc:
+        audit_rollback_error = exc
+    return inventory_error, audit_rollback_error
+
+
+def run_schema_trial(
+    *, target: SchemaTrialTarget, authorization: SchemaTrialAuthorization,
+    trial_password: str,
+) -> TrialResult:
+    """Disabled-by-default rehearsal inside a rolled-back schema transaction.
+
+    This calls frozen revision functions, not Alembic env.py or its versioning.
+    A future authorization must pin the exact target and checkpoint constants.
+    """
+    _validate_schema_request(target, authorization)
+    c15, c16 = _frozen_revisions()
+    if type(trial_password) is not str or not trial_password:
+        raise TrialBlocked("an explicit schema trial credential is required")
+
+    url = URL.create(
+        "postgresql+psycopg", username=target.role, password=trial_password,
+        host=target.host, port=target.port, database=target.database,
+    )
+    engine = sqlalchemy.create_engine(url, poolclass=NullPool)
+    try:
+        with engine.connect() as connection:
+            driver = _validate_connection(connection)
+            transaction = connection.begin()
+            original_schemas = original_relations = original_constraints = None
+            primary_error = rollback_error = None
+            inventory_error = audit_rollback_error = None
+            try:
+                _validate_identity(connection.execute(_IDENTITY_SQL).one_or_none(), target)
+                _validate_schema_role(connection)
+                original_schemas = _schema_names(connection)
+                if target.schema in original_schemas:
+                    raise TrialBlocked("trial schema already exists")
+                original_relations = _relations(connection)
+                original_constraints = _constraints(connection)
+                _require_active_transaction(connection, driver)
+
+                # The allowlisted identifier cannot contain quotes or SQL syntax.
+                # Both the schema and this SET LOCAL equivalent are rolled back.
+                connection.exec_driver_sql(f'CREATE SCHEMA "{target.schema}"')
+                _require_active_transaction(connection, driver)
+                path = f"{target.schema}, pg_catalog, pg_temp"
+                connection.execute(_SET_PATH_SQL, {"path": path})
+                _require_schema_stage(
+                    connection, target.schema, (), original_relations,
+                    original_constraints, original_schemas,
+                )
+                context = MigrationContext.configure(connection=connection)
+                operations = Operations(context)
+
+                def check_transaction_and_path():
+                    _require_active_transaction(connection, driver)
+                    _require_schema_path(connection, target.schema)
+                    _require_active_transaction(connection, driver)
+
+                guarded = _CheckedOperations(operations, check_transaction_and_path)
+
+                def check_stage(expected):
+                    _require_active_transaction(connection, driver)
+                    _require_schema_stage(
+                        connection, target.schema, expected, original_relations,
+                        original_constraints, original_schemas,
+                    )
+
+                with _REVISION_BINDING_LOCK:
+                    _run_revision_sequence(
+                        c15, c16, guarded, check_transaction_and_path, check_stage
+                    )
+            except Exception as exc:
+                primary_error = exc
+            finally:
+                try:
+                    transaction.rollback()
+                except Exception as exc:
+                    rollback_error = exc
+                if original_constraints is not None:
+                    if rollback_error is None:
+                        inventory_error, audit_rollback_error = (
+                            _post_rollback_catalog_errors(
+                                connection, driver, original_schemas,
+                                original_relations, original_constraints,
+                            )
+                        )
+                    else:
+                        inventory_error = TrialBlocked(
+                            "catalog inspection is unverified after rollback failure"
+                        )
+            if (
+                primary_error is not None and rollback_error is None
+                and inventory_error is None and audit_rollback_error is None
+            ):
+                raise primary_error.with_traceback(primary_error.__traceback__)
+            if (
+                primary_error is not None or rollback_error is not None
+                or inventory_error is not None or audit_rollback_error is not None
+            ):
+                reasons = []
+                if primary_error is not None:
+                    reasons.append("trial operation failed")
+                if rollback_error is not None:
+                    reasons.append("trial rollback failed")
+                if inventory_error is not None:
+                    reasons.append("catalog cleanup unverified")
+                if audit_rollback_error is not None:
+                    reasons.append("catalog inspection transaction did not close")
+                blocked = TrialBlocked("; ".join(reasons))
+                blocked.original_error = primary_error
+                blocked.rollback_error = rollback_error
+                blocked.inventory_error = inventory_error
+                blocked.audit_rollback_error = audit_rollback_error
+                cause = (
+                    primary_error if primary_error is not None else
+                    rollback_error if rollback_error is not None else
+                    inventory_error if inventory_error is not None else
+                    audit_rollback_error
+                )
+                raise blocked from cause
+            return TrialResult(
+                upgrades=(C15_REVISION, C16_REVISION),
+                downgrades=(C16_REVISION, C15_REVISION),
+                rolled_back=True,
+            )
     finally:
         engine.dispose()

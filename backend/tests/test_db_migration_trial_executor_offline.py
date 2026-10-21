@@ -759,6 +759,656 @@ class MigrationTrialExecutorOfflineTests(unittest.TestCase):
                 )
         create_engine.assert_not_called()
 
+    @contextmanager
+    def approved_schema_for_mock_only(self):
+        with (
+            patch.object(trial, "APPROVED_SCHEMA_TRIAL_TARGET", self.schema_target),
+            patch.object(
+                trial, "APPROVED_SCHEMA_TRIAL_CHECKPOINT",
+                self.schema_authorization.checkpoint,
+            ),
+        ):
+            yield
+
+    @property
+    def schema_target(self):
+        return trial.SchemaTrialTarget(
+            "127.0.0.1", 5432, trial.AUTHORITATIVE_DATABASE,
+            "frc22_trial_unit", "frc22_c16_trial_unit",
+        )
+
+    @property
+    def schema_authorization(self):
+        return trial.SchemaTrialAuthorization(
+            "C16-R11.15-OFFLINE-UNIT", self.schema_target
+        )
+
+    def schema_connection(
+        self, *, identity=None, role=_UNSET, schemas=None, relations=None,
+        path=None, fks=(), constraints=None,
+    ):
+        target = self.schema_target
+        if identity is None:
+            identity = (
+                target.database, target.role, target.host, target.port,
+                180002, False, False, False, "off",
+            )
+        if role is _UNSET:
+            role = (True, False, False, False, True, True, True, True)
+        if schemas is None:
+            schemas = [
+                ("public",),
+                *(("public", target.schema) for _ in range(5)),
+                ("public",),
+            ]
+        if relations is None:
+            baseline = (("public", "existing_unrelated", "r"),)
+            def stage(names):
+                return baseline + tuple((target.schema, name, "r") for name in names)
+            relations = [
+                baseline, stage(()), stage(trial.C15_TABLES),
+                stage(trial.C16_TABLES), stage(trial.C15_TABLES),
+                stage(()), baseline,
+            ]
+        if constraints is None:
+            baseline_constraints = (("public", "existing_constraint", "c"),)
+            constraints = [baseline_constraints] * 7
+        if path is None:
+            path = (
+                target.schema, f"{target.schema}, pg_catalog, pg_temp",
+                (target.schema, "pg_catalog"),
+            )
+        schema_iter = iter(schemas)
+        relation_iter = iter(relations)
+        constraint_iter = iter(constraints)
+        connection = self.connection(identity=identity)
+        driver = connection.connection.driver_connection
+        connection.in_transaction.side_effect = lambda: (
+            connection.begin.called and not connection.begin.return_value.rollback.called
+        )
+        connection.begin.return_value.rollback.side_effect = lambda: setattr(
+            driver.info, "transaction_status", TransactionStatus.IDLE
+        )
+        original_execute = connection.execute.side_effect
+
+        def execute(statement, parameters=None):
+            if statement is trial._ROLE_SQL:
+                return FakeResult(one=role)
+            if statement is trial._SCHEMAS_SQL:
+                return FakeResult(rows=tuple((name,) for name in next(schema_iter)))
+            if statement is trial._RELATIONS_SQL:
+                return FakeResult(rows=next(relation_iter))
+            if statement is trial._CONSTRAINTS_SQL:
+                return FakeResult(rows=next(constraint_iter))
+            if statement is trial._PATH_SQL:
+                return FakeResult(one=path)
+            if statement is trial._SET_PATH_SQL:
+                self.assertEqual(
+                    parameters, {"path": f"{target.schema}, pg_catalog, pg_temp"}
+                )
+                return FakeResult(one=parameters["path"])
+            if statement is trial._FKS_SQL:
+                self.assertEqual(parameters, {"schema": target.schema})
+                return FakeResult(rows=fks)
+            return original_execute(statement)
+
+        connection.execute.side_effect = execute
+        return connection
+
+    def run_schema_with_mock_operations(self, connection, operations):
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection) as (create_engine, engine),
+            patch.object(trial.MigrationContext, "configure", return_value=Mock())
+            as configure,
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            result = trial.run_schema_trial(
+                target=self.schema_target,
+                authorization=self.schema_authorization,
+                trial_password="offline-unit-only",
+            )
+        return result, configure, create_engine, engine
+
+    def test_schema_gate_defaults_to_none_and_preserves_old_refusal(self):
+        self.assertIsNone(trial.APPROVED_SCHEMA_TRIAL_TARGET)
+        self.assertIsNone(trial.APPROVED_SCHEMA_TRIAL_CHECKPOINT)
+        with patch("sqlalchemy.create_engine") as create_engine:
+            with self.assertRaises(trial.TrialBlocked):
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        create_engine.assert_not_called()
+        forbidden = trial.TrialTarget(
+            "127.0.0.1", 5432, trial.AUTHORITATIVE_DATABASE,
+            trial.AUTHORITATIVE_ROLE,
+        )
+        with patch.object(trial, "APPROVED_TRIAL_TARGET", forbidden), patch.object(
+            trial, "APPROVED_TRIAL_CHECKPOINT", "offline-unit"
+        ):
+            with self.assertRaises(trial.TrialBlocked):
+                trial._validate_request(
+                    forbidden, trial.TrialAuthorization("offline-unit", forbidden)
+                )
+
+    def test_schema_target_and_authorization_fail_closed_before_connection(self):
+        target = self.schema_target
+        invalid = (
+            None,
+            trial.SchemaTrialTarget("localhost", 5432, target.database, target.role, target.schema),
+            trial.SchemaTrialTarget(target.host, 5433, target.database, target.role, target.schema),
+            trial.SchemaTrialTarget(target.host, target.port, "other_db", target.role, target.schema),
+            trial.SchemaTrialTarget(target.host, target.port, target.database, "postgres", target.schema),
+            trial.SchemaTrialTarget(target.host, target.port, target.database,
+                                    trial.AUTHORITATIVE_ROLE, target.schema),
+            *(
+                trial.SchemaTrialTarget(
+                    target.host, target.port, target.database, target.role, name
+                )
+                for name in (
+                    "", "public", "pg_temp", "pg_catalog",
+                    "information_schema", "frc22_c16_trial_x;DROP",
+                    "frc22_c16_trial_x, public", "frc22_c16_trial_X",
+                )
+            ),
+        )
+        with self.approved_schema_for_mock_only(), patch(
+            "sqlalchemy.create_engine"
+        ) as create_engine:
+            for candidate in invalid:
+                with self.subTest(candidate=candidate):
+                    with self.assertRaises(trial.TrialBlocked):
+                        trial.run_schema_trial(
+                            target=candidate,
+                            authorization=trial.SchemaTrialAuthorization(
+                                self.schema_authorization.checkpoint, candidate
+                            ),
+                            trial_password="offline-unit-only",
+                        )
+            for auth in (None, trial.SchemaTrialAuthorization("wrong", target)):
+                with self.assertRaises(trial.TrialBlocked):
+                    trial.run_schema_trial(
+                        target=target, authorization=auth,
+                        trial_password="offline-unit-only",
+                    )
+        create_engine.assert_not_called()
+
+    def test_schema_role_and_identity_reject_unsafe_privileges(self):
+        cases = (
+            {"identity": (
+                self.schema_target.database, self.schema_target.role,
+                "0.0.0.0", 5432, 180002, False, False, False, "off",
+            )},
+            {"identity": (
+                self.schema_target.database, self.schema_target.role,
+                "127.0.0.1", 5432, 170000, False, False, False, "off",
+            )},
+            {"identity": (
+                self.schema_target.database, self.schema_target.role,
+                "127.0.0.1", 5432, 180002, True, False, False, "off",
+            )},
+            {"identity": (
+                self.schema_target.database, self.schema_target.role,
+                "127.0.0.1", 5432, 180002, False, True, False, "off",
+            )},
+            *({"role": role} for role in (
+                None, (True, True, False, False, True, True, True, True),
+                (True, False, True, False, True, True, True, True),
+                (True, False, False, True, True, True, True, True),
+                (True, False, False, False, True, False, True, True),
+                (True, False, False, False, True, True, False, True),
+                (True, False, False, False, True, True, True, False),
+            )),
+        )
+        for change in cases:
+            with self.subTest(change=change):
+                connection = self.schema_connection(**change)
+                with (
+                    self.approved_schema_for_mock_only(),
+                    self.private_engine_for_mock_only(connection) as (_, engine),
+                    patch.object(trial, "Operations") as operations,
+                ):
+                    with self.assertRaises(trial.TrialBlocked):
+                        trial.run_schema_trial(
+                            target=self.schema_target,
+                            authorization=self.schema_authorization,
+                            trial_password="offline-unit-only",
+                        )
+                connection.exec_driver_sql.assert_not_called()
+                operations.assert_not_called()
+                connection.begin.return_value.rollback.assert_called_once()
+                engine.dispose.assert_called_once()
+
+    def test_schema_existing_name_blocks_before_ddl(self):
+        connection = self.schema_connection(schemas=[("public", self.schema_target.schema)])
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection),
+        ):
+            with self.assertRaises(trial.TrialBlocked):
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        connection.exec_driver_sql.assert_not_called()
+
+    def test_schema_search_path_rejects_fallback_and_shadowing(self):
+        target = self.schema_target
+        for path in (
+            (target.schema, f"{target.schema}, public", (target.schema, "public")),
+            ("public", f"{target.schema}, pg_catalog, pg_temp", ("public",)),
+            (target.schema, f"{target.schema}, pg_catalog, pg_temp", ("pg_temp_3", target.schema)),
+            (target.schema, f"{target.schema}, pg_catalog, pg_temp", (target.schema, "public")),
+            (target.schema, f"{target.schema}, pg_catalog, pg_temp", (target.schema, "other")),
+            (target.schema, f"{target.schema}, pg_catalog, pg_temp", (target.schema,)),
+            (target.schema, f"{target.schema}, pg_catalog, pg_temp",
+             (target.schema, target.schema, "pg_catalog")),
+        ):
+            with self.subTest(path=path):
+                connection = self.schema_connection(path=path)
+                with self.assertRaises(trial.TrialBlocked):
+                    trial._require_schema_path(connection, target.schema)
+
+    def test_schema_autocommit_and_inactive_transaction_block_before_ddl(self):
+        for modification in (
+            lambda c: setattr(c.connection.driver_connection, "autocommit", True),
+            lambda c: setattr(c.get_execution_options, "return_value",
+                              {"isolation_level": "AUTOCOMMIT"}),
+        ):
+            connection = self.schema_connection()
+            modification(connection)
+            with (
+                self.approved_schema_for_mock_only(),
+                self.private_engine_for_mock_only(connection),
+            ):
+                with self.assertRaises(trial.TrialBlocked):
+                    trial.run_schema_trial(
+                        target=self.schema_target,
+                        authorization=self.schema_authorization,
+                        trial_password="offline-unit-only",
+                    )
+            connection.exec_driver_sql.assert_not_called()
+
+        connection = self.schema_connection()
+        connection.connection.driver_connection.info.transaction_status = (
+            TransactionStatus.IDLE
+        )
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection),
+        ):
+            with self.assertRaises(trial.TrialBlocked):
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        connection.exec_driver_sql.assert_not_called()
+        connection.begin.return_value.rollback.assert_called_once()
+
+    def test_schema_lost_driver_blocks_before_first_migration_ddl(self):
+        connection = self.schema_connection()
+        operations, events = self.recording_operations()
+        driver = connection.connection.driver_connection
+
+        def lose_driver(statement):
+            driver.info.transaction_status = TransactionStatus.IDLE
+
+        connection.exec_driver_sql.side_effect = lose_driver
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection),
+            patch.object(trial.MigrationContext, "configure") as configure,
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            with self.assertRaises(trial.TrialBlocked):
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        self.assertEqual(events, [])
+        configure.assert_not_called()
+        connection.begin.return_value.rollback.assert_called_once()
+
+    def test_schema_swapped_driver_and_path_change_block_before_migrations(self):
+        for change in ("driver", "path"):
+            with self.subTest(change=change):
+                connection = self.schema_connection()
+                operations, events = self.recording_operations()
+                if change == "driver":
+                    connection.exec_driver_sql.side_effect = (
+                        lambda statement: setattr(
+                            connection.connection, "driver_connection",
+                            Mock(spec=PsycopgConnection),
+                        )
+                    )
+                else:
+                    original_execute = connection.execute.side_effect
+
+                    def changed_path(statement, parameters=None):
+                        if statement is trial._PATH_SQL:
+                            return FakeResult(one=(
+                                "public", "public", ("public", "pg_catalog"),
+                            ))
+                        return original_execute(statement, parameters)
+
+                    connection.execute.side_effect = changed_path
+                with (
+                    self.approved_schema_for_mock_only(),
+                    self.private_engine_for_mock_only(connection),
+                    patch.object(trial.MigrationContext, "configure") as configure,
+                    patch.object(trial, "Operations", return_value=operations),
+                ):
+                    with self.assertRaises(trial.TrialBlocked):
+                        trial.run_schema_trial(
+                            target=self.schema_target,
+                            authorization=self.schema_authorization,
+                            trial_password="offline-unit-only",
+                        )
+                self.assertEqual(events, [])
+                configure.assert_not_called()
+                connection.begin.return_value.rollback.assert_called_once()
+
+    def test_schema_catalog_rejects_cross_schema_relation_and_fk(self):
+        target = self.schema_target
+        baseline = (("public", "existing_unrelated", "r"),)
+        escaped = baseline + (("public", "escaped_index", "i"),) + tuple(
+            (target.schema, name, "r") for name in trial.C15_TABLES
+        )
+        for change in (
+            {"relations": [baseline, baseline, escaped]},
+            {"constraints": [
+                (("public", "existing_constraint", "c"),),
+                (("public", "existing_constraint", "c"),),
+                (("public", "existing_constraint", "c"),
+                 ("public", "escaped_constraint", "c")),
+            ]},
+            {"fks": (("frc22_c16_trial_unit", "public"),)},
+        ):
+            with self.subTest(change=change):
+                connection = self.schema_connection(**change)
+                operations, events = self.recording_operations()
+                with (
+                    self.approved_schema_for_mock_only(),
+                    self.private_engine_for_mock_only(connection),
+                    patch.object(trial.MigrationContext, "configure", return_value=Mock()),
+                    patch.object(trial, "Operations", return_value=operations),
+                ):
+                    with self.assertRaises(trial.TrialBlocked):
+                        trial.run_schema_trial(
+                            target=target,
+                            authorization=self.schema_authorization,
+                            trial_password="offline-unit-only",
+                        )
+                connection.begin.return_value.rollback.assert_called_once()
+                if "relations" in change or "constraints" in change:
+                    self.assertTrue(events)
+
+    def test_schema_sequence_rollback_and_private_resources_are_mocked(self):
+        connection = self.schema_connection()
+        operations, events = self.recording_operations()
+        result, configure, create_engine, engine = self.run_schema_with_mock_operations(
+            connection, operations
+        )
+        self.assertTrue(result.rolled_back)
+        self.assertEqual(result.upgrades, (trial.C15_REVISION, trial.C16_REVISION))
+        self.assertEqual(result.downgrades, (trial.C16_REVISION, trial.C15_REVISION))
+        self.assertEqual(sum(name == "execute" for name, _, _ in events[:33]), 33)
+        self.assertEqual(events[33][0], "create_unique_constraint")
+        self.assertEqual(events[-1][1][0].statement, "DROP TABLE license_plans")
+        self.assertEqual(connection.exec_driver_sql.call_count, 1)
+        self.assertEqual(
+            connection.exec_driver_sql.call_args.args[0],
+            f'CREATE SCHEMA "{self.schema_target.schema}"',
+        )
+        configure.assert_called_once_with(connection=connection)
+        self.assertIs(create_engine.call_args.kwargs["poolclass"], NullPool)
+        connection.begin.return_value.rollback.assert_called_once()
+        connection.begin.return_value.commit.assert_not_called()
+        engine.connect.return_value.__exit__.assert_called_once()
+        engine.dispose.assert_called_once()
+
+    def schema_connection_for_c16_failure(self, *, residue=False):
+        target = self.schema_target
+        baseline = (("public", "existing_unrelated", "r"),)
+        baseline_constraints = (("public", "existing_constraint", "c"),)
+        return self.schema_connection(
+            schemas=[
+                ("public",),
+                ("public", target.schema),
+                ("public", target.schema),
+                ("public", target.schema) if residue else ("public",),
+            ],
+            relations=[
+                baseline,
+                baseline,
+                baseline + tuple((target.schema, name, "r") for name in trial.C15_TABLES),
+                baseline,
+            ],
+            constraints=[baseline_constraints] * 4,
+        )
+
+    def test_schema_exception_rolls_back_closes_and_disposes(self):
+        connection = self.schema_connection_for_c16_failure()
+        operations, _ = self.recording_operations()
+        operations.create_table.side_effect = RuntimeError("simulated failure")
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection) as (_, engine),
+            patch.object(trial.MigrationContext, "configure", return_value=Mock()),
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "simulated failure"):
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        connection.begin.return_value.rollback.assert_called_once()
+        engine.connect.return_value.__exit__.assert_called_once()
+        engine.dispose.assert_called_once()
+
+    def test_schema_migration_failure_checks_catalog_after_rollback(self):
+        target = self.schema_target
+        connection = self.schema_connection_for_c16_failure()
+        operations, _ = self.recording_operations()
+        original_error = RuntimeError("migration failed")
+        operations.create_table.side_effect = original_error
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection) as (_, engine),
+            patch.object(trial.MigrationContext, "configure", return_value=Mock()),
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "migration failed") as raised:
+                trial.run_schema_trial(
+                    target=target, authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        self.assertIs(raised.exception, original_error)
+        connection.begin.return_value.rollback.assert_called_once()
+        connection.rollback.assert_called_once()
+        engine.connect.return_value.__exit__.assert_called_once()
+        engine.dispose.assert_called_once()
+        for statement in (
+            trial._SCHEMAS_SQL, trial._RELATIONS_SQL, trial._CONSTRAINTS_SQL
+        ):
+            self.assertEqual(
+                sum(call.args[0] is statement for call in connection.execute.call_args_list),
+                4,
+                "catalog must be checked again after rollback on migration failure",
+            )
+
+    def test_schema_failure_with_post_rollback_residue_preserves_cause(self):
+        connection = self.schema_connection_for_c16_failure(residue=True)
+        operations, _ = self.recording_operations()
+        original = RuntimeError("migration failed")
+        operations.create_table.side_effect = original
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection) as (_, engine),
+            patch.object(trial.MigrationContext, "configure", return_value=Mock()),
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            with self.assertRaises(trial.TrialBlocked) as raised:
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        self.assertIs(raised.exception.original_error, original)
+        self.assertIs(raised.exception.__cause__, original)
+        self.assertIn("residue", str(raised.exception.inventory_error))
+        connection.begin.return_value.rollback.assert_called_once()
+        connection.rollback.assert_called_once()
+        engine.dispose.assert_called_once()
+
+    def test_schema_failure_with_rollback_error_blocks_inventory(self):
+        connection = self.schema_connection_for_c16_failure()
+        operations, _ = self.recording_operations()
+        original = RuntimeError("migration failed")
+        rollback_error = RuntimeError("rollback failed")
+        operations.create_table.side_effect = original
+        connection.begin.return_value.rollback.side_effect = rollback_error
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection) as (_, engine),
+            patch.object(trial.MigrationContext, "configure", return_value=Mock()),
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            with self.assertRaises(trial.TrialBlocked) as raised:
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        self.assertIs(raised.exception.__cause__, original)
+        self.assertIs(raised.exception.rollback_error, rollback_error)
+        self.assertIn("unverified", str(raised.exception.inventory_error))
+        connection.begin.return_value.rollback.assert_called_once()
+        connection.rollback.assert_not_called()
+        engine.connect.return_value.__exit__.assert_called_once()
+        engine.dispose.assert_called_once()
+
+    def test_schema_failure_with_post_rollback_inventory_error_preserves_cause(self):
+        connection = self.schema_connection_for_c16_failure()
+        original_execute = connection.execute.side_effect
+        reads = 0
+        inventory_error = RuntimeError("catalog unavailable")
+
+        def fail_last_inventory(statement, parameters=None):
+            nonlocal reads
+            if statement is trial._SCHEMAS_SQL:
+                reads += 1
+                if reads == 4:
+                    raise inventory_error
+            return original_execute(statement, parameters)
+
+        connection.execute.side_effect = fail_last_inventory
+        operations, _ = self.recording_operations()
+        original = RuntimeError("migration failed")
+        operations.create_table.side_effect = original
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection) as (_, engine),
+            patch.object(trial.MigrationContext, "configure", return_value=Mock()),
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            with self.assertRaises(trial.TrialBlocked) as raised:
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        self.assertEqual(reads, 4)
+        self.assertIs(raised.exception.__cause__, original)
+        self.assertIs(raised.exception.inventory_error, inventory_error)
+        connection.begin.return_value.rollback.assert_called_once()
+        connection.rollback.assert_called_once()
+        engine.dispose.assert_called_once()
+
+    def test_schema_failure_with_intrans_after_rollback_blocks_inventory(self):
+        connection = self.schema_connection_for_c16_failure()
+        connection.begin.return_value.rollback.side_effect = lambda: None
+        operations, _ = self.recording_operations()
+        original = RuntimeError("migration failed")
+        operations.create_table.side_effect = original
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection) as (_, engine),
+            patch.object(trial.MigrationContext, "configure", return_value=Mock()),
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            with self.assertRaises(trial.TrialBlocked) as raised:
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        self.assertIs(raised.exception.__cause__, original)
+        self.assertIn("state is unverified", str(raised.exception.inventory_error))
+        self.assertEqual(
+            sum(call.args[0] is trial._SCHEMAS_SQL
+                for call in connection.execute.call_args_list),
+            3,
+        )
+        connection.rollback.assert_called_once()
+        engine.dispose.assert_called_once()
+
+    def test_schema_audit_transaction_rollback_error_blocks_success(self):
+        connection = self.schema_connection()
+        audit_error = RuntimeError("audit rollback failed")
+        connection.rollback.side_effect = audit_error
+        operations, _ = self.recording_operations()
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection) as (_, engine),
+            patch.object(trial.MigrationContext, "configure", return_value=Mock()),
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            with self.assertRaises(trial.TrialBlocked) as raised:
+                trial.run_schema_trial(
+                    target=self.schema_target,
+                    authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        self.assertIsNone(raised.exception.original_error)
+        self.assertIsNone(raised.exception.rollback_error)
+        self.assertIsNone(raised.exception.inventory_error)
+        self.assertIs(raised.exception.audit_rollback_error, audit_error)
+        connection.begin.return_value.rollback.assert_called_once()
+        connection.rollback.assert_called_once()
+        engine.connect.return_value.__exit__.assert_called_once()
+        engine.dispose.assert_called_once()
+
+    def test_schema_post_rollback_residue_blocks_pass(self):
+        target = self.schema_target
+        # The final catalog snapshot still contains the uncommitted schema.
+        schemas = [
+            ("public",),
+            *(("public", target.schema) for _ in range(5)),
+            ("public", target.schema),
+        ]
+        connection = self.schema_connection(schemas=schemas)
+        operations, _ = self.recording_operations()
+        with (
+            self.approved_schema_for_mock_only(),
+            self.private_engine_for_mock_only(connection) as (_, engine),
+            patch.object(trial.MigrationContext, "configure", return_value=Mock()),
+            patch.object(trial, "Operations", return_value=operations),
+        ):
+            with self.assertRaises(trial.TrialBlocked):
+                trial.run_schema_trial(
+                    target=target, authorization=self.schema_authorization,
+                    trial_password="offline-unit-only",
+                )
+        connection.begin.return_value.rollback.assert_called_once()
+        engine.dispose.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
