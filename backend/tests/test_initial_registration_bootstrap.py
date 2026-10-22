@@ -154,3 +154,59 @@ class InitialRegistrationBootstrapTests(unittest.TestCase):
             for secret in ("52998224725", "synthetic-long-password",
                            "pessoa@example.com", "CCCC"):
                 self.assertNotIn(secret, rendered)
+
+    def test_completed_attempt_replays_before_duplicate_probe(self):
+        from app import initial_registration_bootstrap as bootstrap
+
+        class Lookup:
+            def __init__(self):
+                self.records = {}
+
+            def find_completed(self, origin_digest, attempt_digest):
+                return self.records.get((origin_digest, attempt_digest))
+
+        lookup = Lookup()
+        first = bootstrap.prepare_or_replay_initial_registration(
+            **self.params, lookup=lookup,
+        )
+        self.assertIsInstance(first, bootstrap.PreparedInitialRegistration)
+        intent = first.intent
+        stored = bootstrap.StoredInitialAttempt(
+            origin_digest=intent.origin_digest,
+            attempt_digest=intent.attempt_digest,
+            request_fingerprint=intent.request_fingerprint,
+            identity_id=intent.registration.identity.id,
+            party_id=intent.registration.party.id,
+            state="COMPLETED",
+            expires_at=intent.attempt_expires_at,
+        )
+        lookup.records[(stored.origin_digest, stored.attempt_digest)] = stored
+        found_probe = Probe(found=True)
+        replay = bootstrap.prepare_or_replay_initial_registration(
+            **(self.params | dict(probe=found_probe, ids=Ids(11),
+                                  now=NOW + timedelta(minutes=1))),
+            lookup=lookup,
+        )
+        self.assertIsInstance(replay, bootstrap.InitialRegistrationReplay)
+        self.assertEqual(replay.identity_id, stored.identity_id)
+        self.assertEqual(replay.party_id, stored.party_id)
+        self.assertFalse(hasattr(replay, "delivery_secret"))
+        with self.assertRaisesRegex(InitialRegistrationError,
+                                    "^INITIAL_ATTEMPT_CONFLICT$"):
+            bootstrap.prepare_or_replay_initial_registration(
+                **(self.params | dict(probe=found_probe,
+                                      name="Outra Pessoa")), lookup=lookup,
+            )
+        with self.assertRaises(InitialRegistrationError):
+            bootstrap.prepare_or_replay_initial_registration(
+                **(self.params | dict(probe=found_probe,
+                                      attempt_key=b"attempt-key-synthetic-0002")),
+                lookup=lookup,
+            )
+        with self.assertRaisesRegex(InitialRegistrationError,
+                                    "^INITIAL_ATTEMPT_EXPIRED$"):
+            bootstrap.prepare_or_replay_initial_registration(
+                **(self.params | dict(probe=found_probe,
+                                      now=NOW + timedelta(minutes=15))),
+                lookup=lookup,
+            )
