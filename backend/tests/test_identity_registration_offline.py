@@ -211,9 +211,9 @@ class RegistrationOfflineTests(unittest.TestCase):
 
     def test_preliminary_status_cannot_be_replaced(self):
         result = self.pj()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             replace(result.identity, status="ATIVA")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             replace(result.party, status="APTO")
 
     def test_no_implicit_database_network_or_files(self):
