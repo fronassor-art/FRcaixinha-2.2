@@ -173,3 +173,16 @@ Fonte detalhada, evidencias, ADR/ERR e limites:
 [checkpoint C16-R12.37](FRcaixinha_2_2_C16_R12_37_Restauracao_Estrutural_Pos_Migration.md).
 Proximo gate: integrar documento, sincronizar Termux e retomar requisitos
 funcionais da Fase 2 sem repetir restauracao ou migration.
+
+## C16-R12.41 — Validacao de documentos implementada (21/10/2026)
+
+Checkpoint posterior a R12.39: baseline `37088dec`, PR #30 para criar
+`app/document_validation.py` e 10 testes offline para CPF e CNPJ numerico
+ou alfanumerico, com mascara integral aceita e DV correto. Nenhum endpoint,
+cadastro real, login, migration, escrita no PostgreSQL ou dependencia nova.
+Run Backend CI `39712992632` do codigo `7e8b953f`: 176/176 e pip check
+PASS; novo HEAD documental exige conferencia do CI final antes do merge.
+Fonte: [C16-R12.41](FRcaixinha_2_2_C16_R12_41_Validacao_CPF_CNPJ.md).
+F2-05/F2-06/F2-07 continuam incompletos; Fase 2 em andamento, Fase 3
+nao iniciada. Proximo gate: integrar PR apos CI do HEAD final e sincronizar
+Termux por fast-forward. Nao repetir migrations ou recuperacao estrutural.
