@@ -52,3 +52,27 @@ Backups SQL/papéis C16-R12.4.7 a .10 continuam preservados e com cópia privada
 Drive comparada byte a byte; referências e hashes no checkpoint C16-R12.5.
 Restauração funcional SQL NOT_RUN; ensaio transacional PostgreSQL NOT_RUN;
 aplicação permanente de C15/C16 NÃO AUTORIZADA. Nenhuma alteração no PG ocorreu.
+
+
+## Atualização comprovada — validação local C16-R12.7R1 PASS
+
+O proprietário executou a correção eb57ce997167481cf33c0bc953ea7aead0cad03e
+na branch fix/f2-c16-r12-7r1-catalog-fk-selection, no mesmo checkout:
+- Debian PRoot Python 3.13.5, backend/.venv existente.
+- unittest discover -s tests -p test_db_license_catalog_schema.py
+  -k test_price_foreign_keys_and_version_chain -v: 1 teste, OK.
+- unittest discover -s tests -p "test_*.py" -v: 159 testes, OK (0.671s).
+- C16_R12_7R1_VALIDACAO_LOCAL=PASS; CORRECAO_EXIT_CODE=0.
+- Retorno a main 0155808916b352cde6f718835df0ab2cdfb10cb5 e árvore limpa
+  confirmados pelo bloco concluído com sucesso.
+- CI da correção eb57ce9: 159 testes PASS, pip check PASS.
+  https://github.com/fronassor-art/FRcaixinha-2.2/actions/runs/39697454791/job/119558204245
+
+ERR-C16-R12.7: correção validada no teste original e na regressão local/CI.
+A falha histórica não deve ser apagada. A correção ainda aguarda integração:
+main/Termux permanecem na base sem a correção, portanto não declarar sua main
+corrigida nem criar backup final por presunção. Após autorização de merge e
+fast-forward local, continuar backup Git e gates do ensaio, sem repetir
+regressão por reflexo se código idêntico e nenhuma nova preocupação.
+Esta atualização altera apenas documentação; consultar CI do HEAD atual da PR.
+Nenhuma escrita PostgreSQL, restauração ou ensaio real foi executado.
