@@ -31,3 +31,8 @@ psycopg==3.3.6
 greenlet==3.5.6
 Mako==1.4.3
 MarkupSafe==3.0.4
+
+# Protecao autenticada de documentos de identidade (C16-R12.56)
+cryptography==50.0.2
+cffi==2.0.0
+pycparser==2.22
