@@ -168,7 +168,7 @@ def authorize(
     if action in _ADMIN:
         return _ALLOWED if grant.role == "TENANT_ADMIN" else _DENIED
     if action == Action.MEMBER_OWN_PROFILE_READ:
-        if resource.owner_user_id != actor.user_id:
+        if grant.role != "TENANT_MEMBER" or resource.owner_user_id != actor.user_id:
             return _DENIED
         active_memberships = [member for member in facts.memberships if (
             member.user_id == actor.user_id and member.tenant_id == context.tenant_id

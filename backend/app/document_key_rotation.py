@@ -33,6 +33,7 @@ def prepare_encryption_rotation(
            for item in keys.values()):
         raise DocumentCryptoError("LOOKUP_KEY_ROTATION_BLOCKED")
     if (not isinstance(new_encryption_key, bytes) or len(new_encryption_key) != 32
+            or hmac.compare_digest(stable_lookup_key, new_encryption_key)
             or any(hmac.compare_digest(item.encryption_key, new_encryption_key)
                    for item in keys.values())):
         raise DocumentCryptoError("ENCRYPTION_KEY_INVALID")
