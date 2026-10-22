@@ -184,6 +184,9 @@ class InitialRegistrationBootstrapTests(unittest.TestCase):
         lookup.records[(stored.origin_digest, stored.attempt_digest)] = stored
         found_probe = self.params["probe"]
         found_probe.found = True
+        with self.assertRaisesRegex(InitialRegistrationError,
+                                    "^INITIAL_REGISTRATION_INVALID$"):
+            self.prepare(ids=Ids(11))
         replay = bootstrap.prepare_or_replay_initial_registration(
             **(self.params | dict(probe=found_probe, ids=Ids(11),
                                   now=NOW + timedelta(minutes=1))),
