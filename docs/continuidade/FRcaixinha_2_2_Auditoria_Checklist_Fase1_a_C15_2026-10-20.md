@@ -168,3 +168,20 @@ Correção em revisão no checkpoint [C16-R12.7R1](FRcaixinha_2_2_C16_R12_7R1_Co
 CI anterior verde não substitui correção e revalidação local. Interromper avanço
 para backup Git/ensaio até corrigir e verificar regressão. Fase 2 em andamento.
 SQL/papéis protegidos preservados; restauração e ensaio real NOT_RUN.
+
+
+## Estado posterior — C16-R12.14, ensaio real concluído
+
+Base main/Termux 13a87726491f55fe20dfa04a6d5b754979fc6355, PR #23.
+Correção FK validada: teste original e regressão local/CI 159/159 PASS.
+Backup Git recuperado independentemente e cópia privada Drive com bytes iguais:
+fffe247fedb91871d4e3222f3d5cccfcfe30c4409a8219d22e70dac758755f7f.
+Ensaio transacional REAL C15/C16 C16-R12.13R1 PASS, exit 0. Chamada direta exige
+PYTHONPATH apontando a backend; falha inicial de importação corrigida sem editar fontes.
+Auditoria independente pós-ensaio C16-R12.14 READ ONLY PASS, exit 0: zero schemas
+de ensaio, relações e constraints de aplicação nos inventários consultados;
+public.alembic_version ausente. DDL revertido, sem migrations permanentes.
+Restauração funcional SQL NOT_RUN; F2-01/F2-02 continuam PARCIAIS; Fase 2 EM ANDAMENTO.
+Fonte atual de evidências, ADR/ERR, backups e próximo gate:
+[checkpoint C16-R12.14](FRcaixinha_2_2_C16_R12_14_Ensaio_Real_e_PosAuditoria.md).
+Esta atualização documental não autoriza novo ensaio, implantação ou Fase 3.
