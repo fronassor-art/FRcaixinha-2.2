@@ -249,3 +249,16 @@ Regressao local/CI anterior 166/166 PASS; nao repetida para documentacao.
 Testes funcionais de dados e recuperacao de dados de aplicacao NAO TESTADOS.
 Fase 2 em andamento; F2-01/F2-02 PARCIAIS; Fase 3 nao iniciada.
 Proximo passo: backup SQL AGE do estado implantado, verificar e guardar copia externa.
+
+
+## C16-R12.33 — Backup pos-migration verificado e externo
+
+Pendencia de backup R12.30 acima superada: dump AGE de 81166 bytes, modo local
+600, 18 TABLE/18 TABLE DATA e revisao c16r5_20261020 conferidos, leitura SQL
+completa sem execucao PASS; R12.30/.31/.32 exit 0. SHA256:
+702849367d765f27f44eac71cd51445efc8410c935afd048b4d3af9149217a4e.
+Copia Drive privada, somente owner, id 1EVq7CAa6LM3IU82aFxcMqYJ1caIw0HB5;
+download, SHA e comparacao byte a byte PASS. Evidencias no checkpoint R12.29.
+Restauracao funcional DESTE dump ainda NOT_RUN; ensaio anterior cobriu dump
+pre-migration sem tabelas. Nenhuma nova migration ou Fase 3 por consequencia.
+Proximo passo: integrar registro documental e atualizar Termux; Fase 2 em andamento.
