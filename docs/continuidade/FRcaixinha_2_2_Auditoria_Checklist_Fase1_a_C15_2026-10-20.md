@@ -198,3 +198,19 @@ CI e validacao Debian pendentes; nao presumir PASS. Fonte ADR/ERR e gates:
 FRcaixinha_2_2_C16_R12_16R1_Transacao_Alembic.md.
 Ensaio real anterior e pos-auditoria seguem PASS. Aplicacao permanente e
 restauracao funcional NOT_RUN. Fase 2 em andamento; Fase 3 nao iniciada.
+
+
+## C16-R12.18 — Plano de implantacao e recuperacao em revisao
+
+PR #25 integrada; main/Termux e6a66da640a865d51d86296144270e928b12374c.
+C16-R12.17 PASS, exit 0; Git limpo e backend identico ao testado localmente.
+Correcao transacional validada: Debian 3.13.5 166/166 e pip check PASS;
+CI final do HEAD dd855edf, run 39701679673, success.
+Plano versionado em FRcaixinha_2_2_C16_R12_18_Plano_Implantacao_Recuperacao.md:
+revisoes explicitas C15 -> C16, preflight, autorizacao, pos-auditoria e falhas.
+Backup Git anterior cobre 13a8772; consolidar copia com correcao integrada.
+Restauracao funcional SQL NOT_RUN: definir procedimento/destino e autorizacao,
+sem criar segunda base/instalacao ou restaurar a autoritativa por presuncao.
+Nao repetir regressao/ensaio para mudanca somente documental.
+Fase 2 em andamento; F2-01/F2-02 PARCIAIS. Implantacao permanente nao autorizada;
+Fase 3 nao iniciada. Proximo passo: revisar/integrar este plano e atualizar Termux.
