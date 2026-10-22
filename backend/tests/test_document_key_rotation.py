@@ -50,6 +50,11 @@ class DocumentKeyRotationTests(unittest.TestCase):
             prepare_encryption_rotation({"old": self.old}, new_key_id="old",
                                         new_encryption_key=b"N" * 32)
 
+    def test_new_cipher_key_cannot_equal_stable_lookup_key(self):
+        with self.assertRaisesRegex(DocumentCryptoError, "ENCRYPTION_KEY_INVALID"):
+            prepare_encryption_rotation({"old": self.old}, new_key_id="new",
+                                        new_encryption_key=b"L" * 32)
+
     def test_repr_and_errors_do_not_expose_keys(self):
         self.assertNotIn("LLLL", repr(self.old))
         with self.assertRaises(DocumentCryptoError) as caught:

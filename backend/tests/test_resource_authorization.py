@@ -19,6 +19,7 @@ CYCLE = UUID("00000000-0000-4000-8000-000000000301")
 OTHER_CYCLE = UUID("00000000-0000-4000-8000-000000000302")
 GRANT = UUID("00000000-0000-4000-8000-000000000401")
 MASTER_GRANT = UUID("00000000-0000-4000-8000-000000000402")
+ADMIN_GRANT = UUID("00000000-0000-4000-8000-000000000403")
 NOW = datetime(2026, 10, 22, 12, tzinfo=timezone.utc)
 
 
@@ -90,6 +91,14 @@ class ResourceAuthorizationTests(unittest.TestCase):
                                      resource=replace(self.resource, tenant_id=OTHER_TENANT)))
         self.assertFalse(self.decide(Action.PLATFORM_CATALOG_READ, facts=facts,
                                      resource=ResourceFact(None, None)))
+
+    def test_admin_and_member_require_explicit_member_context_for_own_profile(self):
+        admin = replace(self.grant, id=ADMIN_GRANT, role="TENANT_ADMIN")
+        facts = replace(self.facts, grants=(self.grant, admin))
+        admin_context = replace(self.context, grant_id=ADMIN_GRANT)
+        self.assertFalse(self.decide(Action.MEMBER_OWN_PROFILE_READ,
+                                     context=admin_context, facts=facts))
+        self.assertTrue(self.decide(Action.MEMBER_OWN_PROFILE_READ, facts=facts))
 
     def test_no_financial_permission_for_any_role(self):
         for role in ("MASTER", "TENANT_ADMIN", "TENANT_MEMBER"):
