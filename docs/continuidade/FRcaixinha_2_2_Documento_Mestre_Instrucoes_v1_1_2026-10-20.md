@@ -544,3 +544,21 @@ sem criar segunda base/instalacao ou restaurar a autoritativa por presuncao.
 Nao repetir regressao/ensaio para mudanca somente documental.
 Fase 2 em andamento; F2-01/F2-02 PARCIAIS. Implantacao permanente nao autorizada;
 Fase 3 nao iniciada. Proximo passo: revisar/integrar este plano e atualizar Termux.
+
+
+## C16-R12.25 — Backup atual e restauracao limitada comprovados
+
+Main/Termux 1386cc3606ade5989a216117115209df60cdd2ef (PR #26), R12.19 PASS.
+Backup Git R12.20-.23: recuperacao independente, 389 objetos/fsck, referencias
+comparadas e Drive privado com download/bytes iguais PASS. SHA256:
+0b2062365ba0a2895a811c6c4424c34980c037454b22f10bb71f019b2329304b.
+Excecao temporaria autorizada: frc22_restore_c16r12 criada, restore executado
+pelo papel restrito, auditorias independentes READ ONLY e remocao final PASS,
+todos exit 0. Inventario voltou a frcaixinha_2_2_dev e tres bases de sistema.
+Restauracao do dump pre-migration sem owner/ACL PASS NO ESCOPO LIMITADO;
+sem tabelas/dados de aplicacao no backup, sua recuperacao continua NAO TESTADA.
+Papeis/senhas/ACL de origem e recuperacao integral NAO VALIDADOS pelo ensaio.
+Evidencias, ADR/ERR e limites: FRcaixinha_2_2_C16_R12_25_Backup_Restore_Limitado.md.
+Fase 2 em andamento; F2-01/F2-02 PARCIAIS; migrations permanentes nao autorizadas.
+Proximo gate: integrar registro, atualizar Termux e preflight READ ONLY fresco;
+proposta de implantacao deve explicitar a limitacao de recuperacao. Fase 3 nao iniciada.
