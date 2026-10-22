@@ -136,8 +136,18 @@ class LicenseCatalogSchemaTests(unittest.TestCase):
             {("plan_id", "id"), ("plan_id", "effective_from"),
              ("previous_price_version_id",)},
         )
-        plan_fk = next(iter(table.c.plan_id.foreign_keys))
-        actor_fk = next(iter(table.c.changed_by.foreign_keys))
+        # plan_id belongs both to the plan FK and to the composite
+        # previous-version FK. Collection iteration order selects neither.
+        plan_fks = table.c.plan_id.foreign_keys
+        self.assertCountEqual(
+            [fk.target_fullname for fk in plan_fks],
+            ["license_plans.id", "license_price_versions.plan_id"],
+        )
+        plan_fk, = (
+            fk for fk in plan_fks
+            if fk.target_fullname == "license_plans.id"
+        )
+        actor_fk, = table.c.changed_by.foreign_keys
         self.assertEqual(plan_fk.target_fullname, "license_plans.id")
         self.assertEqual(actor_fk.target_fullname, "user_identities.id")
         self.assertEqual(plan_fk.ondelete, "RESTRICT")
