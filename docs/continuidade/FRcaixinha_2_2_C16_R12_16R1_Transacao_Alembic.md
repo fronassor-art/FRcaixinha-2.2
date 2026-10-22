@@ -64,3 +64,19 @@ Inclui reproducao do fluxo anterior sem commit, sucesso com commit unico,
 rollback e gates. Evidencia: https://github.com/fronassor-art/FRcaixinha-2.2/actions/runs/39701366976
 Este adendo substitui apenas a pendencia de CI do codigo acima. Validacao
 Debian 3.13.5 continua pendente; sem merge e sem operacao PostgreSQL.
+
+## Evidencia posterior — validacao local PASS
+
+O proprietario executou no Termux/Debian o commit
+d50efa49e2ef09e77f662aa09c6802ba0c88ba33, Python 3.13.5.
+Baseline main 14ae65f9524e2e38bd8cf48585c7e80f8b7b314c PASS.
+Comparacao das revisoes, modelos e requirements com a base: sem diferencas.
+pip check: No broken requirements found.
+Regressao completa: Ran 166 tests in 0.689s, OK.
+C16_R12_16R1_VALIDACAO_LOCAL=PASS; CORRECAO_TRANSACAO_EXIT_CODE=0.
+Retorno a main e Git limpo confirmados. Sem conexao PostgreSQL nesta validacao.
+Este adendo encerra a pendencia local citada acima. Proximo passo e revisar e
+integrar a PR #25, atualizar Termux e concluir o plano de implantacao/recuperacao.
+A validacao cobre o controle de transacao com DBAPI simulado; nao demonstra
+commit real nem execucao completa do ambiente Alembic contra PostgreSQL.
+Fase 2 em andamento; aplicacao permanente e restauracao SQL continuam NOT_RUN.
