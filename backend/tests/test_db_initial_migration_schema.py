@@ -63,13 +63,18 @@ class InitialMigrationSchemaTests(unittest.TestCase):
         self.assertIsNone(revision.down_revision)
         self.assertIsNone(revision.branch_labels)
         self.assertIsNone(revision.depends_on)
-        self.assertEqual(len(Base.metadata.tables), 17)
-        self.assertEqual(
-            set(Base.metadata.tables),
-            set(C15_TABLE_ORDER) | {
-                "license_subscriptions", "license_entitlement_segments",
-            },
-        )
+        # Os 17 modelos C15/C16 permanecem presentes e inalterados;
+        # quatro modelos P5 apenas espelham a minuta P4 ainda nao aplicada.
+        originals = set(C15_TABLE_ORDER) | {
+            "license_subscriptions", "license_entitlement_segments",
+        }
+        proposed = {
+            "identity_credentials", "email_confirmation_challenges",
+            "registration_idempotency", "identity_sessions",
+        }
+        self.assertEqual(len(Base.metadata.tables), 21)
+        self.assertEqual(set(Base.metadata.tables) - proposed, originals)
+        self.assertEqual(set(Base.metadata.tables), originals | proposed)
         self.assertEqual(revision.TABLE_ORDER, C15_TABLE_ORDER)
         self.assertNotIn("license_subscriptions", revision.TABLE_ORDER)
 
