@@ -51,7 +51,7 @@ class ContractingPartyDraft:
     cnpj: str | None
 
 
-def _normalize_name(value: object, *, full_name: bool) -> str | None:
+def _normalize_name(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     # Rejeita controles (inclusive quebra de linha), caracteres invisíveis
@@ -60,7 +60,7 @@ def _normalize_name(value: object, *, full_name: bool) -> str | None:
         return None
     result = " ".join(unicodedata.normalize("NFC", value).split())
     words = result.split(" ")
-    if not result or len(result) > 200 or (full_name and len(words) < 2):
+    if not result or len(result) > 200:
         return None
     if not all(any(char.isalpha() for char in word) for word in words):
         return None
@@ -107,7 +107,7 @@ def prepare_person_draft(
     *, name: object, cpf: object, email: object, phone: object
 ) -> PersonDraft:
     """Verifica campos formais; não valida email/telefone por confirmação."""
-    checked_name = _normalize_name(name, full_name=True)
+    checked_name = _normalize_name(name)
     if checked_name is None:
         raise IdentityDraftError("NOME_INVALIDO")
     checked_cpf = normalize_cpf(cpf)
@@ -140,7 +140,7 @@ def prepare_pj_contractor_draft(
     representative_phone: object,
 ) -> ContractingPartyDraft:
     """Prepara rascunho sem habilitar contratação PJ ou representação."""
-    checked_name = _normalize_name(legal_name, full_name=False)
+    checked_name = _normalize_name(legal_name)
     if checked_name is None:
         raise IdentityDraftError("RAZAO_SOCIAL_INVALIDA")
     checked_cnpj = normalize_cnpj(cnpj)
