@@ -190,6 +190,26 @@ class RegistrationOfflineTests(unittest.TestCase):
             self.assertEqual(str(caught.exception), "CONFLICT_CHECK_FAILED")
             self.assertIsNone(caught.exception.__cause__)
 
+    def test_probe_property_exception_is_redacted_before_encryption(self):
+        def explode(_self):
+            raise RuntimeError("DADO_SENSIVEL")
+
+        for bad_name in ("cpf_exists", "email_exists", "cnpj_exists"):
+            with self.subTest(method=bad_name):
+                class ExplodingProbe:
+                    def cpf_exists(self, _value): return False
+                    def email_exists(self, _value): return False
+                    def cnpj_exists(self, _value): return False
+
+                setattr(ExplodingProbe, bad_name, property(explode))
+                with patch.object(self.crypto, "encrypt") as encrypt:
+                    with self.assertRaises(RegistrationPreparationError) as caught:
+                        self.pf(probe=ExplodingProbe())
+                    self.assertEqual(str(caught.exception),
+                                     "CONFLICT_PROBE_UNAVAILABLE")
+                    self.assertNotIn("DADO_SENSIVEL", repr(caught.exception))
+                    encrypt.assert_not_called()
+
     def test_crypto_failure_does_not_leak_material(self):
         with patch.object(self.crypto, "encrypt", side_effect=RuntimeError("SECRET")):
             with self.assertRaises(RegistrationPreparationError) as caught:
