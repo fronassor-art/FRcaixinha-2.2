@@ -108,9 +108,14 @@ class PersonDraftTests(unittest.TestCase):
         with self.assertRaisesRegex(IdentityDraftError, "^NOME_INVALIDO$"):
             prepare_person_draft(**{**PERSON, "name": "A" * 201 + " B"})
 
+    def test_single_word_name_not_arbitrarily_forbidden(self) -> None:
+        # Exigência de nome completo não autoriza presumir regra de dois termos.
+        draft = prepare_person_draft(**{**PERSON, "name": "Maria"})
+        self.assertEqual(draft.name, "Maria")
+
     def test_invalid_names_fail_closed(self) -> None:
         for value in (
-            "", "   ", "Maria", "Maria\nSilva", "Maria\tSilva",
+            "", "   ", "Maria\nSilva", "Maria\tSilva",
             "Maria\u200b Silva", "12 34", "Maria 123", None, 123,
         ):
             with self.subTest(kind=type(value).__name__, value=value):
