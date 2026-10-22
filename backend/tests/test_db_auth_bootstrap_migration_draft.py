@@ -51,7 +51,7 @@ class AuthBootstrapMigrationDraftTests(unittest.TestCase):
             "REFERENCES user_identities (id) ON DELETE RESTRICT",
             "REFERENCES contracting_parties (id) ON DELETE RESTRICT",
             "UNIQUE (origin_digest, attempt_digest)",
-            "password_digest LIKE 'scrypt$v1$%'",
+            "password_digest LIKE 'scrypt$v1$%%'",
             "INTERVAL '10 minutes'", "INTERVAL '15 minutes'",
             "octet_length(verifier_sha256) = 32",
             "PENDING_EMAIL", "INITIAL_EMAIL",
