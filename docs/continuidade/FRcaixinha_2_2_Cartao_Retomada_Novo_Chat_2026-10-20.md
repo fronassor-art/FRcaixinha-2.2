@@ -202,3 +202,30 @@ PR #31 deve ter CI final PASS antes de integrar e atualizar Termux.
 Registro detalhado: [C16-R12.46](FRcaixinha_2_2_C16_R12_46_Preparacao_Identidade_PF_PJ.md).
 Fase 2 em andamento e funcionalidades PF/PJ/tenant ainda incompletas;
 Fase 3 nao iniciada.
+
+## C16-R12.66 — Checkpoint criptografia e backup (22/10/2026)
+
+PR #32 integrada na `main` `752d3a34644ca536100930f1ec2006c0b5f9a79a`, com
+commit funcional `3384d111a833bdab4bc028a502cfced68436daae`. Backend CI SUCCESS:
+209/209 testes; Termux sincronizado por fast-forward (R12.61 PASS).
+
+O módulo documental usa AES-256-GCM, envelope versionado, nonce de 12 bytes,
+`key_id` autenticado no AAD, HMAC-SHA256 com domínios CPF/CNPJ e HKDF-SHA256
+com finalidades separadas. Pins: cryptography 50.0.2, cffi 2.0.0 e pycparser
+2.22; testes criptográficos 13/13, regressão 209/209 e pip check PASS.
+
+Backup Git C16-R12.62:
+`FRcaixinha_2_2_C16_R12_62_752d3a34644c.bundle.age`, 339124 bytes,
+SHA-256 `ff08ea2c8351b8a5a0b2770a7af4d72c41133a8be7737876656fbe8e08481094`.
+R12.63 validou recuperação independente, 524 objetos e fsck strict; R12.64
+confirmou cópia privada no Drive (file ID
+`1zgNIbuBeDySFpGqCHcfOdeMK8qz3RKrO`) com SHA idêntico; R12.65 removeu a
+cópia temporária de Downloads. Senhas e credenciais permanecem fora do
+registro.
+
+PostgreSQL autoritativo `frcaixinha_2_2_dev`, 18.2, revisão
+`c16r5_20261020`: auditoria READ ONLY R12.50 registrou 18 tabelas e 70
+índices. Nenhuma migration ou escrita neste ciclo; recuperação de dados reais
+de aplicação não comprovada. Fase 2 em andamento; rotação, persistência,
+integração API, autorização operacional e fluxos financeiros permanecem
+pendentes. Fase 3 não iniciada.
