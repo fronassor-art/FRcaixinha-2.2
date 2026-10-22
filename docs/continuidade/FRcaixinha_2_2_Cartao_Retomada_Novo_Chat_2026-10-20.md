@@ -122,3 +122,20 @@ Evidencias, ADR/ERR e limites: FRcaixinha_2_2_C16_R12_25_Backup_Restore_Limitado
 Fase 2 em andamento; F2-01/F2-02 PARCIAIS; migrations permanentes nao autorizadas.
 Proximo gate: integrar registro, atualizar Termux e preflight READ ONLY fresco;
 proposta de implantacao deve explicitar a limitacao de recuperacao. Fase 3 nao iniciada.
+
+
+## C16-R12.29 — C15/C16 aplicadas permanentemente e auditadas
+
+Base de execucao main/Termux 67adc6eda5b93ad0c84d15862b48b8fba4ff53ee.
+Autorizacao especifica recebida para C15/C16 e COMMIT. R12.27 READ ONLY PASS;
+R12.28 Alembic upgrade c16r5_20261020 PASS, exit 0. Nova conexao psql R12.29
+confirmou 17 tabelas de aplicacao + alembic_version, unica revisao c16r5_20261020,
+owner frc22_owner, 70 indices validos/prontos e zero constraints nao validadas.
+R12.29 PASS, exit 0; Git limpo. Estado historico "migrations nao aplicadas"
+superado SOMENTE para C15/C16. Nao repetir upgrade, downgrade ou stamp.
+Fonte: FRcaixinha_2_2_C16_R12_29_Implantacao_e_Auditoria.md.
+Backup PostgreSQL pos-migration PENDENTE (R12.30); dump anterior nao cobre tabelas.
+Regressao local/CI anterior 166/166 PASS; nao repetida para documentacao.
+Testes funcionais de dados e recuperacao de dados de aplicacao NAO TESTADOS.
+Fase 2 em andamento; F2-01/F2-02 PARCIAIS; Fase 3 nao iniciada.
+Proximo passo: backup SQL AGE do estado implantado, verificar e guardar copia externa.
