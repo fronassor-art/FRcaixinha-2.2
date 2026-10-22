@@ -178,10 +178,12 @@ class InitialRegistrationBootstrapTests(unittest.TestCase):
             identity_id=intent.registration.identity.id,
             party_id=intent.registration.party.id,
             state="COMPLETED",
+            created_at=NOW,
             expires_at=intent.attempt_expires_at,
         )
         lookup.records[(stored.origin_digest, stored.attempt_digest)] = stored
-        found_probe = Probe(found=True)
+        found_probe = self.params["probe"]
+        found_probe.found = True
         replay = bootstrap.prepare_or_replay_initial_registration(
             **(self.params | dict(probe=found_probe, ids=Ids(11),
                                   now=NOW + timedelta(minutes=1))),
@@ -210,3 +212,66 @@ class InitialRegistrationBootstrapTests(unittest.TestCase):
                                       now=NOW + timedelta(minutes=15))),
                 lookup=lookup,
             )
+
+    def test_replay_rejects_changed_origin_password_and_untrusted_result(self):
+        from dataclasses import replace
+        from app import initial_registration_bootstrap as bootstrap
+
+        first = self.prepare()
+        intent = first.intent
+        stored = bootstrap.StoredInitialAttempt(
+            origin_digest=intent.origin_digest,
+            attempt_digest=intent.attempt_digest,
+            request_fingerprint=intent.request_fingerprint,
+            identity_id=intent.registration.identity.id,
+            party_id=intent.registration.party.id,
+            state="COMPLETED", created_at=NOW,
+            expires_at=intent.attempt_expires_at,
+        )
+
+        class Lookup:
+            def find_completed(self, _origin_digest, _attempt_digest):
+                return stored
+
+        for changed in (dict(origin_scope=b"X" * 32),
+                        dict(password="another-synthetic-password")):
+            with self.subTest(changed=list(changed)):
+                with self.assertRaisesRegex(InitialRegistrationError,
+                                            "^INITIAL_ATTEMPT_CONFLICT$"):
+                    bootstrap.prepare_or_replay_initial_registration(
+                        **(self.params | changed), lookup=Lookup(),
+                    )
+        for invalid in (replace(stored, state="RESERVED"),
+                        replace(stored, identity_id=UUID(int=0)),
+                        replace(stored, expires_at=NOW + timedelta(hours=1))):
+            class InvalidLookup:
+                def find_completed(self, _origin_digest, _attempt_digest):
+                    return invalid
+
+            with self.assertRaisesRegex(InitialRegistrationError,
+                                        "^INITIAL_REGISTRATION_INVALID$"):
+                bootstrap.prepare_or_replay_initial_registration(
+                    **self.params, lookup=InvalidLookup(),
+                )
+        with self.assertRaisesRegex(InitialRegistrationError,
+                                    "^INITIAL_REGISTRATION_INVALID$"):
+            bootstrap.prepare_or_replay_initial_registration(
+                **self.params, lookup=None,
+            )
+
+    def test_pj_preprobe_fingerprint_matches_prepared_registration(self):
+        from app import initial_registration_bootstrap as bootstrap
+
+        class EmptyLookup:
+            def find_completed(self, _origin_digest, _attempt_digest):
+                return None
+
+        result = bootstrap.prepare_or_replay_initial_registration(
+            **(self.params | dict(party_type="PJ",
+                                  legal_name="Empresa Exemplo Ltda",
+                                  cnpj="12.ABC.345/01DE-35")),
+            lookup=EmptyLookup(),
+        )
+        self.assertIsInstance(result, bootstrap.PreparedInitialRegistration)
+        self.assertEqual(result.intent.registration.party.status,
+                         "PRELIMINAR")

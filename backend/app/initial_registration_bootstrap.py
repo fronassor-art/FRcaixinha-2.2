@@ -83,7 +83,7 @@ def prepare_initial_registration(
     attempt_key: bytes, fingerprint_key: bytes, now: datetime,
 ) -> PreparedInitialRegistration:
     """Produz apenas campos para uma transação futura; não autentica ninguém."""
-    if (party_type not in ("PF", "PJ")
+    if (type(party_type) is not str or party_type not in ("PF", "PJ")
             or not isinstance(now, datetime) or now.tzinfo is None
             or now.utcoffset() is None
             or not isinstance(origin_scope, bytes) or len(origin_scope) != 32
@@ -173,3 +173,164 @@ def equivalent_initial_attempt(
                                        candidate.request_fingerprint)):
         raise InitialRegistrationError("INITIAL_ATTEMPT_CONFLICT")
     return True
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class StoredInitialAttempt:
+    """Resultado concluído lido de storage confiável, nunca de campos do cliente."""
+
+    origin_digest: bytes
+    attempt_digest: bytes
+    request_fingerprint: bytes
+    identity_id: UUID
+    party_id: UUID
+    state: str
+    created_at: datetime
+    expires_at: datetime
+
+    def __repr__(self) -> str:
+        return "StoredInitialAttempt(<redacted>)"
+
+
+class InitialAttemptLookup(Protocol):
+    """Porta futura: consultar tentativa persistida por origem e chave HMAC."""
+
+    def find_completed(
+        self, origin_digest: bytes, attempt_digest: bytes,
+    ) -> StoredInitialAttempt | None: ...
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class InitialRegistrationReplay:
+    """Reutiliza somente IDs comprovados; nunca reenvia segredo de contato."""
+
+    identity_id: UUID
+    party_id: UUID
+
+    def __repr__(self) -> str:
+        return "InitialRegistrationReplay(<redacted>)"
+
+
+def _preprobe_claim(
+    *, party_type: str, name: object, cpf: object, email: object,
+    phone: object, password: str, legal_name: object, cnpj: object,
+    crypto: DocumentCrypto, origin_scope: bytes, attempt_key: bytes,
+    fingerprint_key: bytes, now: datetime,
+) -> tuple[bytes, bytes, bytes]:
+    """Normaliza e identifica a tentativa antes de consultar CPF/e-mail/CNPJ."""
+    if (type(party_type) is not str or party_type not in ("PF", "PJ")
+            or not isinstance(now, datetime) or now.tzinfo is None
+            or now.utcoffset() is None
+            or not isinstance(origin_scope, bytes) or len(origin_scope) != 32
+            or not isinstance(attempt_key, bytes)
+            or not 16 <= len(attempt_key) <= 128
+            or not isinstance(fingerprint_key, bytes)
+            or len(fingerprint_key) != 32
+            or not isinstance(crypto, DocumentCrypto)
+            or party_type == "PF" and (legal_name is not None or cnpj is not None)):
+        raise InitialRegistrationError("INITIAL_REGISTRATION_INVALID")
+    try:
+        from app.identity_draft import (
+            prepare_pf_contractor_draft, prepare_pj_contractor_draft,
+        )
+        from app.offline_credentials import _password_bytes
+
+        password_bytes = _password_bytes(password)
+        if password_bytes is None:
+            raise ValueError
+        if party_type == "PF":
+            draft = prepare_pf_contractor_draft(
+                name=name, cpf=cpf, email=email, phone=phone,
+            )
+        else:
+            draft = prepare_pj_contractor_draft(
+                legal_name=legal_name, cnpj=cnpj,
+                representative_name=name, representative_cpf=cpf,
+                representative_email=email, representative_phone=phone,
+            )
+        cpf_digest = crypto.lookup_hmac(draft.person.cpf, kind="CPF")
+        cnpj_digest = (crypto.lookup_hmac(draft.cnpj, kind="CNPJ")
+                       if draft.party_type == "PJ" else b"")
+        fields = (
+            draft.party_type.encode("ascii"), draft.person.name.encode("utf-8"),
+            cpf_digest, draft.person.email.encode("ascii"),
+            draft.person.phone.encode("ascii"), draft.legal_name.encode("utf-8"),
+            cnpj_digest, password_bytes,
+        )
+        return (
+            _digest(fingerprint_key, b"ORIGIN", origin_scope),
+            _digest(fingerprint_key, b"ATTEMPT", origin_scope, attempt_key),
+            _digest(fingerprint_key, b"REQUEST", *fields),
+        )
+    except Exception:
+        raise InitialRegistrationError("INITIAL_REGISTRATION_INVALID") from None
+
+
+def prepare_or_replay_initial_registration(
+    *, party_type: str, name: object, cpf: object, email: object,
+    phone: object, password: str, legal_name: object = None,
+    cnpj: object = None, ids: BootstrapIdentifiers,
+    crypto: DocumentCrypto, probe: ConflictProbe,
+    challenge_entropy: ChallengeEntropy, origin_scope: bytes,
+    attempt_key: bytes, fingerprint_key: bytes, now: datetime,
+    lookup: InitialAttemptLookup,
+) -> PreparedInitialRegistration | InitialRegistrationReplay:
+    """Consulta tentativa concluída antes do probe; só storage confiável autoriza replay.
+
+    O futuro adaptador deve consultar e reservar na mesma transação protegida por
+    UNIQUE; uma corrida após lookup negativo exige reconsulta transacional.
+    """
+    origin_digest, attempt_digest, request_fingerprint = _preprobe_claim(
+        party_type=party_type, name=name, cpf=cpf, email=email, phone=phone,
+        password=password, legal_name=legal_name, cnpj=cnpj, crypto=crypto,
+        origin_scope=origin_scope, attempt_key=attempt_key,
+        fingerprint_key=fingerprint_key, now=now,
+    )
+    try:
+        find = getattr(lookup, "find_completed")
+        if not callable(find):
+            raise ValueError
+        stored = find(origin_digest, attempt_digest)
+    except Exception:
+        raise InitialRegistrationError("INITIAL_REGISTRATION_INVALID") from None
+    if stored is not None:
+        if (type(stored) is not StoredInitialAttempt
+                or any(not isinstance(value, bytes) or len(value) != 32
+                       for value in (stored.origin_digest, stored.attempt_digest,
+                                     stored.request_fingerprint))
+                or not _valid_uuid(stored.identity_id)
+                or not _valid_uuid(stored.party_id)
+                or stored.identity_id == stored.party_id
+                or stored.state != "COMPLETED"
+                or not isinstance(stored.created_at, datetime)
+                or stored.created_at.tzinfo is None
+                or stored.created_at.utcoffset() is None
+                or not isinstance(stored.expires_at, datetime)
+                or stored.expires_at.tzinfo is None
+                or stored.expires_at.utcoffset() is None
+                or stored.expires_at <= stored.created_at
+                or stored.expires_at - stored.created_at > _ATTEMPT_LIFETIME
+                or now < stored.created_at):
+            raise InitialRegistrationError("INITIAL_REGISTRATION_INVALID")
+        if (not hmac.compare_digest(stored.origin_digest, origin_digest)
+                or not hmac.compare_digest(stored.attempt_digest, attempt_digest)
+                or not hmac.compare_digest(stored.request_fingerprint,
+                                           request_fingerprint)):
+            raise InitialRegistrationError("INITIAL_ATTEMPT_CONFLICT")
+        if now >= stored.expires_at:
+            raise InitialRegistrationError("INITIAL_ATTEMPT_EXPIRED")
+        return InitialRegistrationReplay(stored.identity_id, stored.party_id)
+    prepared = prepare_initial_registration(
+        party_type=party_type, name=name, cpf=cpf, email=email, phone=phone,
+        password=password, legal_name=legal_name, cnpj=cnpj, ids=ids,
+        crypto=crypto, probe=probe, challenge_entropy=challenge_entropy,
+        origin_scope=origin_scope, attempt_key=attempt_key,
+        fingerprint_key=fingerprint_key, now=now,
+    )
+    intent = prepared.intent
+    if (not hmac.compare_digest(intent.origin_digest, origin_digest)
+            or not hmac.compare_digest(intent.attempt_digest, attempt_digest)
+            or not hmac.compare_digest(intent.request_fingerprint,
+                                       request_fingerprint)):
+        raise InitialRegistrationError("INITIAL_REGISTRATION_INVALID")
+    return prepared
