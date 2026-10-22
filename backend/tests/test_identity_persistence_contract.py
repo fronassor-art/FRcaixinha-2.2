@@ -122,3 +122,27 @@ class PersistenceContractTests(unittest.TestCase):
         file.assert_not_called()
         network.assert_not_called()
         db.assert_not_called()
+
+    def test_unicode_issuer_uses_controlled_error(self):
+        issuer = "lócal"
+        auth = replace(self.auth, issuer=issuer,
+                       value=f"{issuer}:{SUBJECT}")
+        with self.assertRaisesRegex(PersistenceContractError,
+                                    "^WRITE_INTENT_INVALID$"):
+            self.intent(auth=auth)
+
+    def test_issuer_beyond_policy_length_uses_controlled_error(self):
+        issuer = "a" * 33
+        auth = replace(self.auth, issuer=issuer,
+                       value=f"{issuer}:{SUBJECT}")
+        with self.assertRaisesRegex(PersistenceContractError,
+                                    "^WRITE_INTENT_INVALID$"):
+            self.intent(auth=auth)
+
+    def test_issuer_beyond_digest_length_uses_controlled_error(self):
+        issuer = "a" * 65536
+        auth = replace(self.auth, issuer=issuer,
+                       value=f"{issuer}:{SUBJECT}")
+        with self.assertRaisesRegex(PersistenceContractError,
+                                    "^WRITE_INTENT_INVALID$"):
+            self.intent(auth=auth)
