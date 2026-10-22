@@ -1262,3 +1262,227 @@ class LicenseEntitlementSegment(IdentityColumns, Base):
     )
 
     # Append-only e provas de pagamento exigem revisao e servico futuros.
+
+
+# Fase 2 / Pacote 5: espelhos ORM da minuta Alembic f2p4_20261022.
+# Declaracoes apenas: tabelas ainda NAO criadas no PostgreSQL autoritativo.
+# Nao importam credenciais, nao emitem sessoes e nao abrem conexoes.
+
+
+class IdentityCredential(Base):
+    """Credencial preparada, sem concessao automatica de autenticacao."""
+
+    __tablename__ = "identity_credentials"
+
+    __table_args__ = (
+        UniqueConstraint("identity_id", name="uq_identity_credentials_identity_id"),
+        ForeignKeyConstraint(
+            ["identity_id"], ["user_identities.id"],
+            name="fk_identity_credentials_identity_id_user_identities",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING_EMAIL', 'ACTIVE', 'REVOKED')",
+            name="status_valid",
+        ),
+        CheckConstraint(
+            "password_digest LIKE 'scrypt$v1$%'",
+            name="digest_format",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4,
+    )
+    identity_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False,
+    )
+    password_digest: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="PENDING_EMAIL",
+        server_default=text("'PENDING_EMAIL'"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class EmailConfirmationChallenge(Base):
+    """Somente verificador; consumo atomico requer adaptador transacional futuro."""
+
+    __tablename__ = "email_confirmation_challenges"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "verifier_sha256",
+            name="uq_email_confirmation_challenges_verifier",
+        ),
+        ForeignKeyConstraint(
+            ["identity_id"], ["user_identities.id"],
+            name="fk_email_confirmation_challenges_identity_id_user_identities",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "octet_length(verifier_sha256) = 32",
+            name="verifier_size",
+        ),
+        CheckConstraint(
+            "purpose = 'INITIAL_EMAIL'",
+            name="purpose",
+        ),
+        CheckConstraint(
+            "expires_at > issued_at AND "
+            "expires_at <= issued_at + INTERVAL '10 minutes'",
+            name="lifetime",
+        ),
+        CheckConstraint(
+            "consumed_at IS NULL OR revoked_at IS NULL",
+            name="not_consumed_revoked",
+        ),
+        Index(
+            "ix_email_confirmation_challenges_identity_expires",
+            "identity_id", "expires_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4,
+    )
+    identity_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False,
+    )
+    verifier_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    purpose: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="INITIAL_EMAIL",
+        server_default=text("'INITIAL_EMAIL'"),
+    )
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+
+
+class RegistrationIdempotency(Base):
+    """Reserva/replay offline, sem provar vinculo relacional identidade/parte."""
+
+    __tablename__ = "registration_idempotency"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "origin_digest", "attempt_digest",
+            name="uq_registration_idempotency_origin_attempt",
+        ),
+        ForeignKeyConstraint(
+            ["identity_id"], ["user_identities.id"],
+            name="fk_registration_idempotency_identity_id_user_identities",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["party_id"], ["contracting_parties.id"],
+            name="fk_registration_idempotency_party_id_contracting_parties",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "octet_length(origin_digest) = 32 AND "
+            "octet_length(attempt_digest) = 32 AND "
+            "octet_length(request_fingerprint) = 32",
+            name="digest_sizes",
+        ),
+        CheckConstraint(
+            "(state = 'RESERVED' AND identity_id IS NULL AND party_id IS NULL) "
+            "OR (state = 'COMPLETED' AND identity_id IS NOT NULL "
+            "AND party_id IS NOT NULL)",
+            name="state_result",
+        ),
+        CheckConstraint(
+            "expires_at > created_at AND "
+            "expires_at <= created_at + INTERVAL '15 minutes'",
+            name="lifetime",
+        ),
+        Index("ix_registration_idempotency_expires", "expires_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4,
+    )
+    origin_digest: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    attempt_digest: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    request_fingerprint: Mapped[bytes] = mapped_column(
+        LargeBinary, nullable=False,
+    )
+    identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True,
+    )
+    party_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True,
+    )
+    state: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="RESERVED",
+        server_default=text("'RESERVED'"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+    )
+
+
+class IdentitySession(Base):
+    """Token opaco representado apenas por verificador de 32 bytes."""
+
+    __tablename__ = "identity_sessions"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "verifier_sha256",
+            name="uq_identity_sessions_verifier",
+        ),
+        ForeignKeyConstraint(
+            ["identity_id"], ["user_identities.id"],
+            name="fk_identity_sessions_identity_id_user_identities",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "octet_length(verifier_sha256) = 32",
+            name="verifier_size",
+        ),
+        CheckConstraint(
+            "expires_at > issued_at AND "
+            "expires_at <= issued_at + INTERVAL '15 minutes'",
+            name="lifetime",
+        ),
+        Index(
+            "ix_identity_sessions_identity_expires",
+            "identity_id", "expires_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4,
+    )
+    identity_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False,
+    )
+    verifier_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
