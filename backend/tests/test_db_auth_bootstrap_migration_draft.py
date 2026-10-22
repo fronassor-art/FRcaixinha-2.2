@@ -71,9 +71,9 @@ class AuthBootstrapMigrationDraftTests(unittest.TestCase):
         self.assertNotIn("user_identities", sql)
         self.assertNotIn("contracting_parties", sql)
 
-    def test_draft_is_separate_from_frozen_models_and_no_sql_connection(self):
-        self.assertEqual(len(Base.metadata.tables), 17)
-        self.assertFalse(set(TABLES) & set(Base.metadata.tables))
+    def test_draft_models_mirror_without_sql_connection(self):
+        self.assertEqual(len(Base.metadata.tables), 21)
+        self.assertEqual(set(TABLES) & set(Base.metadata.tables), set(TABLES))
         with patch("psycopg.connect") as connect:
             self.render(revision.upgrade)
             self.render(revision.downgrade)
