@@ -185,7 +185,7 @@ class LicenseEntitlementSegmentSchemaTests(unittest.TestCase):
         )
         self.assertNotIn("CASCADE", ddl)
         self.assertNotIn("PAGO_CONFIRMADO", ddl)
-        self.assertEqual(len(Base.metadata.tables), 17)
+        self.assertEqual(len(Base.metadata.tables), 21)
 
 
 if __name__ == "__main__":
