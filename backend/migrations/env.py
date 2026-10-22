@@ -80,7 +80,9 @@ def run_migrations_online():
     )
 
     try:
-        with engine.connect() as connection:
+        # A transacao pertence a este escopo, inclusive a consulta de identidade.
+        # Alembic detecta a transacao externa; o Engine confirma ou reverte.
+        with engine.begin() as connection:
             identity = connection.execute(
                 text(
                     "SELECT current_database(), current_user, "

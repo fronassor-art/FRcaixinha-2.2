@@ -75,3 +75,16 @@ Restauração funcional SQL NOT_RUN; F2-01/F2-02 continuam PARCIAIS; Fase 2 EM A
 Fonte atual de evidências, ADR/ERR, backups e próximo gate:
 [checkpoint C16-R12.14](FRcaixinha_2_2_C16_R12_14_Ensaio_Real_e_PosAuditoria.md).
 Esta atualização documental não autoriza novo ensaio, implantação ou Fase 3.
+
+
+## C16-R12.16R1 — Correcao da transacao Alembic em revisao
+
+Main/Termux 14ae65f9524e2e38bd8cf48585c7e80f8b7b314c, PR #24, atualizacao
+C16-R12.15 PASS. Inspecao offline C16-R12.16 PASS identificou autobegin da
+consulta de identidade sem commit externo no env.py. Correcao proposta:
+engine.begin() envolvendo identidade e migrations; nenhuma revisao alterada.
+Novo teste usa SQLAlchemy/Alembic reais com DBAPI gravador, sem banco ou sockets.
+CI e validacao Debian pendentes; nao presumir PASS. Fonte ADR/ERR e gates:
+FRcaixinha_2_2_C16_R12_16R1_Transacao_Alembic.md.
+Ensaio real anterior e pos-auditoria seguem PASS. Aplicacao permanente e
+restauracao funcional NOT_RUN. Fase 2 em andamento; Fase 3 nao iniciada.
