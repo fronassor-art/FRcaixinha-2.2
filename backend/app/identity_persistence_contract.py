@@ -14,7 +14,7 @@ from app.identity_registration_offline import (
     PreparedIdentity, PreparedParty, PreparedRegistration,
 )
 from app.offline_credentials import session_is_current
-from app.trusted_auth_subject import ResolvedAuthSubject
+from app.trusted_auth_subject import ResolvedAuthSubject, issuer_is_valid
 
 
 class PersistenceContractError(ValueError):
@@ -53,6 +53,7 @@ def prepare_preliminary_write_intent(
             or not isinstance(auth, ResolvedAuthSubject)
             or not isinstance(auth.subject_id, UUID)
             or auth.subject_id.int == 0
+            or not issuer_is_valid(auth.issuer)
             or auth.value != f"{auth.issuer}:{auth.subject_id}"
             or not session_is_current(auth.session,
                                       subject_id=auth.subject_id, now=now)

@@ -17,6 +17,11 @@ _ISSUER = re.compile(r"[a-z][a-z0-9_-]{0,31}", re.ASCII)
 _AUDIENCE = "frcaixinha-api"
 
 
+def issuer_is_valid(value: object) -> bool:
+    """Mesma política de emissor para resolução e contratos derivados."""
+    return isinstance(value, str) and _ISSUER.fullmatch(value) is not None
+
+
 class AuthTrustError(ValueError):
     """Falha estável sem assertion, credencial ou identificador de pessoa."""
 
@@ -54,7 +59,7 @@ def resolve_auth_subject(
     expected_issuer: str, now: datetime,
 ) -> ResolvedAuthSubject:
     """Valida fatos retornados pela porta, mantendo sujeito separado de PII."""
-    if not isinstance(expected_issuer, str) or not _ISSUER.fullmatch(expected_issuer):
+    if not issuer_is_valid(expected_issuer):
         raise AuthTrustError("AUTH_POLICY_INVALID")
     if not isinstance(assertion, bytes) or not 16 <= len(assertion) <= 4096:
         raise AuthTrustError("AUTH_ASSERTION_REJECTED")
