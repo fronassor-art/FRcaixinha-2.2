@@ -53,3 +53,14 @@ F2-01/F2-02 PARCIAIS. Fase 2 EM ANDAMENTO; Fase 3 nao iniciada.
 Migrations permanentes, novo ensaio e restauracao SQL nao autorizados aqui.
 Antes de implantacao: integrar correcao validada, concluir plano de recuperacao
 e obter autorizacao especifica para o comando e revisoes exatos.
+
+## Evidencia posterior — CI da correcao PASS
+
+PR #25 em rascunho, codigo b6aec0f22c696d0267064e72e0bd057fa27ce30e.
+Backend CI run 39701366976, job 119571117057, conclusion success.
+Python 3.13.16; pip check: No broken requirements found.
+Regressao: Ran 166 tests in 0.517s, OK (159 anteriores + 7 novos).
+Inclui reproducao do fluxo anterior sem commit, sucesso com commit unico,
+rollback e gates. Evidencia: https://github.com/fronassor-art/FRcaixinha-2.2/actions/runs/39701366976
+Este adendo substitui apenas a pendencia de CI do codigo acima. Validacao
+Debian 3.13.5 continua pendente; sem merge e sem operacao PostgreSQL.
