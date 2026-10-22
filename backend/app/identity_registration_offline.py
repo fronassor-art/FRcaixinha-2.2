@@ -4,7 +4,7 @@ O resultado não é inserível diretamente: a origem confiável de auth_subject,
 a prova de contato e a transação de unicidade dependem de aprovação futura.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 from uuid import UUID
 
@@ -39,7 +39,7 @@ class PreparedIdentity:
     cpf_lookup_hmac: bytes
     email: str
     phone: str
-    status: str = "PENDENTE"
+    status: str = field(default="PENDENTE", init=False)
 
     def __repr__(self) -> str:
         return "PreparedIdentity(<redacted>)"
@@ -54,7 +54,7 @@ class PreparedParty:
     representative_user_id: UUID | None
     tax_id_ciphertext: bytes | None
     tax_id_lookup_hmac: bytes | None
-    status: str = "PRELIMINAR"
+    status: str = field(default="PRELIMINAR", init=False)
 
     def __repr__(self) -> str:
         return "PreparedParty(<redacted>)"

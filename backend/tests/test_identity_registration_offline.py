@@ -1,7 +1,7 @@
 """Cadastro sintético e inteiramente offline; sem identidade ou chave reais."""
 
 import unittest
-from dataclasses import FrozenInstanceError, fields
+from dataclasses import FrozenInstanceError, fields, replace
 from unittest.mock import patch
 from uuid import UUID
 
@@ -208,6 +208,13 @@ class RegistrationOfflineTests(unittest.TestCase):
         self.assertFalse(hasattr(result, "tenant_id"))
         self.assertFalse(hasattr(result.party, "role"))
         self.assertFalse(hasattr(result.party, "license"))
+
+    def test_preliminary_status_cannot_be_replaced(self):
+        result = self.pj()
+        with self.assertRaises(ValueError):
+            replace(result.identity, status="ATIVA")
+        with self.assertRaises(ValueError):
+            replace(result.party, status="APTO")
 
     def test_no_implicit_database_network_or_files(self):
         with patch("socket.socket", side_effect=AssertionError("network")), \
