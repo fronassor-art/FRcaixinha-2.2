@@ -148,11 +148,24 @@ def prepare_initial_registration(
 
 def equivalent_initial_attempt(
     previous: InitialRegistrationIntent, candidate: InitialRegistrationIntent,
+    *, now: datetime,
 ) -> bool:
     """Classifica repetição; o storage futuro deve consultar antes do probe."""
     if (not isinstance(previous, InitialRegistrationIntent)
-            or not isinstance(candidate, InitialRegistrationIntent)):
+            or not isinstance(candidate, InitialRegistrationIntent)
+            or not isinstance(now, datetime) or now.tzinfo is None
+            or now.utcoffset() is None
+            or not isinstance(previous.attempt_expires_at, datetime)
+            or previous.attempt_expires_at.tzinfo is None
+            or previous.attempt_expires_at.utcoffset() is None):
         raise InitialRegistrationError("INITIAL_REGISTRATION_INVALID")
+    if now >= previous.attempt_expires_at:
+        raise InitialRegistrationError("INITIAL_ATTEMPT_EXPIRED")
+    for digest in (previous.origin_digest, previous.attempt_digest,
+                   previous.request_fingerprint, candidate.origin_digest,
+                   candidate.attempt_digest, candidate.request_fingerprint):
+        if not isinstance(digest, bytes) or len(digest) != 32:
+            raise InitialRegistrationError("INITIAL_REGISTRATION_INVALID")
     if not hmac.compare_digest(previous.attempt_digest, candidate.attempt_digest):
         return False
     if (not hmac.compare_digest(previous.origin_digest, candidate.origin_digest)

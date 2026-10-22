@@ -94,17 +94,32 @@ class InitialRegistrationBootstrapTests(unittest.TestCase):
         first = self.prepare()
         repeated = self.prepare(ids=Ids(11))
         self.assertTrue(equivalent_initial_attempt(first.intent,
-                                                   repeated.intent))
+                                                   repeated.intent, now=NOW + timedelta(minutes=1)))
         self.assertNotEqual(first.intent.registration.identity.id,
                             repeated.intent.registration.identity.id)
         changed = self.prepare(ids=Ids(21), name="Outra Pessoa")
         with self.assertRaisesRegex(InitialRegistrationError,
                                     "^INITIAL_ATTEMPT_CONFLICT$"):
-            equivalent_initial_attempt(first.intent, changed.intent)
+            equivalent_initial_attempt(first.intent, changed.intent, now=NOW + timedelta(minutes=1))
         new_attempt = self.prepare(ids=Ids(31),
                                    attempt_key=b"attempt-key-synthetic-0002")
         self.assertFalse(equivalent_initial_attempt(first.intent,
-                                                     new_attempt.intent))
+                                                     new_attempt.intent, now=NOW + timedelta(minutes=1)))
+
+    def test_expired_or_malformed_attempt_fails_closed(self):
+        from dataclasses import replace
+        first = self.prepare()
+        repeated = self.prepare(ids=Ids(11))
+        with self.assertRaisesRegex(InitialRegistrationError,
+                                    "^INITIAL_ATTEMPT_EXPIRED$"):
+            equivalent_initial_attempt(
+                first.intent, repeated.intent, now=NOW + timedelta(minutes=15))
+        malformed = replace(first.intent, attempt_digest=b"short")
+        with self.assertRaisesRegex(InitialRegistrationError,
+                                    "^INITIAL_REGISTRATION_INVALID$"):
+            equivalent_initial_attempt(
+                malformed, repeated.intent, now=NOW + timedelta(minutes=1))
+
 
     def test_duplicate_probe_blocks_new_identity(self):
         with self.assertRaisesRegex(InitialRegistrationError,
