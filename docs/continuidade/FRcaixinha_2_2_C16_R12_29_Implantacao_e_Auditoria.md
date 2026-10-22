@@ -85,3 +85,35 @@ Papeis nao alterados por esta implantacao; backup separado anterior preservado.
 Nenhum erro bloqueante nas execucoes apresentadas. Nenhuma nova operacao SQL foi
 executada pelo conector para escrever este registro.
 Depois consolidar a evidencia do novo backup nesta PR antes de integra-la.
+
+## Evidencia posterior — R12.30 a .33, backup pos-migration
+
+Esta secao supera a pendencia de criacao/leitura/copia externa citada acima.
+R12.30: arquivo FRcaixinha_2_2_C16_R12_30_67adc6eda5b9.dump.age,
+81166 bytes, modo local 600; banco/revisao conferidos antes do pg_dump 18.2
+--format=custom --create em modo READ ONLY, criptografia AGE por pipe.
+C16_R12_30_BACKUP_POS_MIGRATION=PASS; BACKUP_POS_MIGRATION_EXIT_CODE=0.
+SHA256: 702849367d765f27f44eac71cd51445efc8410c935afd048b4d3af9149217a4e.
+Original em ~/.local/share/frcaixinha_2_2/backups/; anteriores preservados.
+
+R12.31: descriptografia e indice conferidos: 18 TABLE e 18 TABLE DATA,
+nomes esperados. SQL lido integralmente por pg_restore --create --file=-,
+sem executar; COPY de alembic_version contem unica revisao c16r5_20261020.
+C16_R12_31_VALIDACAO_BACKUP=PASS; VALIDACAO_BACKUP_EXIT_CODE=0.
+Isso nao comprova linhas de negocio presentes nem restauracao funcional.
+
+R12.32: copia AGE para Downloads, 81166 bytes e mesmo SHA, Git limpo:
+C16_R12_32_EXPORTACAO_BACKUP=PASS; EXPORTACAO_BACKUP_EXIT_CODE=0.
+R12.33: arquivo anexo conferido por SHA, upload via conector Google Drive na
+pasta oficial 1SPEujdnAjbU2IG6YdI1S0Bjb5PgJSNGf, id
+1EVq7CAa6LM3IU82aFxcMqYJ1caIw0HB5. Metadados: shared=false, somente owner,
+pasta correta, 81166 bytes. Download do Drive, SHA e comparacao byte a byte
+com o anexo PASS, processo exit 0.
+Link: https://drive.google.com/file/d/1EVq7CAa6LM3IU82aFxcMqYJ1caIw0HB5/view
+
+Backup do estado implantado disponivel local e externamente. Restauracao
+FUNCIONAL DESTE NOVO DUMP continua NOT_RUN; ensaio anterior cobriu apenas dump
+pre-migration sem tabelas e sem owner/ACL. Papeis globais nao alterados.
+Proximo passo: revisar/integrar esta PR documental e atualizar Termux;
+depois definir proximo requisito da Fase 2 sem repetir migrations aplicadas.
+Fase 2 em andamento; Fase 3 nao iniciada.
