@@ -46,3 +46,15 @@ não autoriza DDL, merge ou aplicação permanente das migrations.
 ADR, ERR corrigido, hashes, evidências, limites e próximo gate estão em
 [checkpoint C16-R12.5](FRcaixinha_2_2_C16_R12_5_Habilitacao_Controlada_2026-10-21.md).
 Resultado do CI desta alteração deve ser lido no job do HEAD da PR, não presumido.
+
+
+## Bloqueio posterior — C16-R12.7 e correção C16-R12.7R1
+
+PR #22 integrada; main 0155808916b352cde6f718835df0ab2cdfb10cb5 e atualização
+Termux C16-R12.6 PASS. Regressão local C16-R12.7 FAIL (1/159), exit 1,
+Python 3.13.5 e pip check PASS: seleção ambígua da FK de plan_id no teste de
+catálogo. A causa foi identificada no teste; modelo e migrations preservados.
+Correção em revisão no checkpoint [C16-R12.7R1](FRcaixinha_2_2_C16_R12_7R1_Correcao_Teste_FK.md).
+CI anterior verde não substitui correção e revalidação local. Interromper avanço
+para backup Git/ensaio até corrigir e verificar regressão. Fase 2 em andamento.
+SQL/papéis protegidos preservados; restauração e ensaio real NOT_RUN.
