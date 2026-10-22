@@ -203,7 +203,7 @@ class LicenseSubscriptionSchemaTests(unittest.TestCase):
         self.assertEqual(revision.revision, "c16r5_20261020")
         self.assertEqual(revision.down_revision, "c15r2_20261020")
         self.assertEqual(scripts.get_base(), "c15r2_20261020")
-        self.assertEqual(scripts.get_heads(), ["c16r5_20261020"])
+        self.assertEqual(scripts.get_heads(), ["f2p4_20261022"])
         output = io.StringIO()
         context = MigrationContext.configure(
             dialect_name="postgresql",
