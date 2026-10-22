@@ -186,3 +186,19 @@ Fonte: [C16-R12.41](FRcaixinha_2_2_C16_R12_41_Validacao_CPF_CNPJ.md).
 F2-05/F2-06/F2-07 continuam incompletos; Fase 2 em andamento, Fase 3
 nao iniciada. Proximo gate: integrar PR apos CI do HEAD final e sincronizar
 Termux por fast-forward. Nao repetir migrations ou recuperacao estrutural.
+
+## C16-R12.46 — Preparacao de rascunho de identidade PF/PJ (22/10/2026)
+
+Apos R12.45, backup Git da versao 894e74d8 foi recuperado em teste bare
+R12.44 PASS e copiado ao Drive privado com SHA de download identico
+R12.45 PASS; mantidos backups anteriores. C16-R12.46: modulo puro
+`backend/app/identity_draft.py` de normalizacao de nome, e-mail e telefone
+nacional com DDD valido, reunindo CPF/CNPJ de C16-R12.41 para preparar
+rascunhos PF/PJ sem efeitos colaterais. Testes separados em
+`backend/tests/test_identity_draft.py`. Nao ha autenticacao, API,
+persistencia de dados pessoais, concessao de papeis, prova de representacao
+PJ, ativacao de licencas, migration, banco extra ou dependencias novas.
+PR #31 deve ter CI final PASS antes de integrar e atualizar Termux.
+Registro detalhado: [C16-R12.46](FRcaixinha_2_2_C16_R12_46_Preparacao_Identidade_PF_PJ.md).
+Fase 2 em andamento e funcionalidades PF/PJ/tenant ainda incompletas;
+Fase 3 nao iniciada.
