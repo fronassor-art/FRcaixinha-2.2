@@ -77,8 +77,16 @@ def _context(identity_id: UUID, party_id: UUID, crypto: DocumentCrypto,
         raise RegistrationPreparationError("RECORD_ID_INVALID")
     if not isinstance(crypto, DocumentCrypto):
         raise RegistrationPreparationError("CRYPTO_UNAVAILABLE")
-    if probe is None or not all(callable(getattr(probe, name, None)) for name in
-                                   ("cpf_exists", "email_exists", "cnpj_exists")):
+    if probe is None:
+        raise RegistrationPreparationError("CONFLICT_PROBE_UNAVAILABLE")
+    try:
+        methods_available = all(
+            callable(getattr(probe, name, None))
+            for name in ("cpf_exists", "email_exists", "cnpj_exists")
+        )
+    except Exception:
+        raise RegistrationPreparationError("CONFLICT_PROBE_UNAVAILABLE") from None
+    if not methods_available:
         raise RegistrationPreparationError("CONFLICT_PROBE_UNAVAILABLE")
 
 

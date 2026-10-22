@@ -208,6 +208,7 @@ class RegistrationOfflineTests(unittest.TestCase):
                     self.assertEqual(str(caught.exception),
                                      "CONFLICT_PROBE_UNAVAILABLE")
                     self.assertNotIn("DADO_SENSIVEL", repr(caught.exception))
+                    self.assertIsNone(caught.exception.__cause__)
                     encrypt.assert_not_called()
 
     def test_crypto_failure_does_not_leak_material(self):
