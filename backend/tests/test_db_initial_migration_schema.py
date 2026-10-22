@@ -76,7 +76,7 @@ class InitialMigrationSchemaTests(unittest.TestCase):
     def test_alembic_discovers_single_initial_revision_without_env(self):
         config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         scripts = ScriptDirectory.from_config(config)
-        self.assertEqual(scripts.get_heads(), ["c16r5_20261020"])
+        self.assertEqual(scripts.get_heads(), ["f2p4_20261022"])
         self.assertEqual(scripts.get_base(), revision.revision)
         self.assertEqual(
             scripts.get_revision("c16r5_20261020").down_revision,
