@@ -152,3 +152,24 @@ download, SHA e comparacao byte a byte PASS. Evidencias no checkpoint R12.29.
 Restauracao funcional DESTE dump ainda NOT_RUN; ensaio anterior cobriu dump
 pre-migration sem tabelas. Nenhuma nova migration ou Fase 3 por consequencia.
 Proximo passo: integrar registro documental e atualizar Termux; Fase 2 em andamento.
+
+## C16-R12.37 — Restauracao estrutural pos-migration validada (21/10/2026)
+
+Este adendo supera somente o estado historico "restauracao do novo dump NOT_RUN".
+R12.34 sincronizacao Git ff-only PASS; R12.35 auditoria da autoritativa READ ONLY
+PASS; R12.36 preflight de recuperacao PASS. Com autorizacao especifica do
+proprietario, R12.37.1/.2/.3/.4 criaram, restauraram, auditaram e removeram
+a base TEMPORARIA `frc22_restore_c16r12`, todos PASS/exit 0. Banco original
+`frcaixinha_2_2_dev` preservado e unico banco nao-sistema no inventario final.
+Restore usou backup C16-R12.30 (81166 bytes, SHA256
+702849367d765f27f44eac71cd51445efc8410c935afd048b4d3af9149217a4e).
+Auditoria READ ONLY encontrou 18 tabelas, 70 indices, constraints validadas
+e revisao `c16r5_20261020` em ambas as bases; contagens iguais,
+`LINHAS=1` (apenas alembic_version). **Recuperacao estrutural PASS no
+escopo; recuperacao de dados de aplicacao NAO TESTADA** por ausencia de linhas;
+owner/ACL/senhas/configuracao de servidor nao recuperados. F2-01/F2-02
+PARCIAIS, Fase 2 em andamento; Fase 3 nao iniciada.
+Fonte detalhada, evidencias, ADR/ERR e limites:
+[checkpoint C16-R12.37](FRcaixinha_2_2_C16_R12_37_Restauracao_Estrutural_Pos_Migration.md).
+Proximo gate: integrar documento, sincronizar Termux e retomar requisitos
+funcionais da Fase 2 sem repetir restauracao ou migration.
