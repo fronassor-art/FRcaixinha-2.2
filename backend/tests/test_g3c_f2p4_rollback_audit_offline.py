@@ -9,9 +9,28 @@ from app.g3c_f2p4_rollback_audit_offline import (
 from migrations.versions import f2p4_20261022_auth_bootstrap_draft as revision
 
 
+# Frozen, non-executable counterexample from PR #55 at this exact commit.
+HISTORICAL_F2P4_COMMIT = "f6ff57cf98c9eccbe69ca55078f45f3f189c7600"
+HISTORICAL_DOWNGRADE_SOURCE = """def downgrade() -> None:
+    op.drop_index("ix_identity_sessions_identity_expires",
+                  table_name="identity_sessions")
+    op.drop_table("identity_sessions")
+    op.drop_index("ix_registration_idempotency_expires",
+                  table_name="registration_idempotency")
+    op.drop_table("registration_idempotency")
+    op.drop_index("ix_email_confirmation_challenges_identity_expires",
+                  table_name="email_confirmation_challenges")
+    op.drop_table("email_confirmation_challenges")
+    op.drop_table("identity_credentials")
+"""
+
+
 class F2P4RollbackAuditOfflineTests(unittest.TestCase):
-    def test_f2p4_downgrade_reports_all_four_destructive_tables(self):
-        risk = audit_current_f2p4_downgrade()
+    def test_historical_f2p4_downgrade_reports_all_four_destructive_tables(self):
+        self.assertEqual(len(HISTORICAL_F2P4_COMMIT), 40)
+        risk = audit_downgrade_source(
+            HISTORICAL_DOWNGRADE_SOURCE, "f2p4_20261022"
+        )
         self.assertEqual(risk.revision, "f2p4_20261022")
         self.assertEqual(risk.drop_tables, (
             "identity_sessions",
@@ -22,8 +41,10 @@ class F2P4RollbackAuditOfflineTests(unittest.TestCase):
         self.assertTrue(risk.destructive)
         self.assertFalse(risk.authorized_to_execute)
 
-    def test_f2p4_downgrade_reports_three_indexes(self):
-        risk = audit_current_f2p4_downgrade()
+    def test_historical_f2p4_downgrade_reports_three_indexes(self):
+        risk = audit_downgrade_source(
+            HISTORICAL_DOWNGRADE_SOURCE, "f2p4_20261022"
+        )
         self.assertEqual(risk.drop_indexes, (
             "ix_identity_sessions_identity_expires",
             "ix_registration_idempotency_expires",
@@ -33,6 +54,9 @@ class F2P4RollbackAuditOfflineTests(unittest.TestCase):
 
     def test_explicit_runtime_approval_gate_never_granted_here(self):
         for risk in (
+            audit_downgrade_source(
+                HISTORICAL_DOWNGRADE_SOURCE, "f2p4_20261022"
+            ),
             audit_current_f2p4_downgrade(),
             DowngradeRisk("f2p4_20261022", (), (), ()),
         ):
@@ -75,14 +99,33 @@ class F2P4RollbackAuditOfflineTests(unittest.TestCase):
                 ):
                     audit_downgrade_source(source, "f2p4")
 
+    def test_current_downgrade_blocks_before_any_alembic_operation(self):
+        with patch.object(revision, "op") as operations:
+            with self.assertRaisesRegex(
+                RuntimeError, "^F2P4_DOWNGRADE_NOT_AUTHORIZED$"
+            ):
+                revision.downgrade()
+        self.assertEqual(operations.method_calls, [])
+        risk = audit_current_f2p4_downgrade()
+        self.assertEqual(risk.drop_tables, ())
+        self.assertEqual(risk.drop_indexes, ())
+        self.assertEqual(risk.unknown_operations, ("RuntimeError",))
+        self.assertFalse(risk.authorized_to_execute)
+
     def test_source_inspection_does_not_connect_or_apply_migration(self):
         with (
             patch("psycopg.connect") as connect,
             patch.object(revision.op, "drop_table") as drop_table,
             patch.object(revision.op, "drop_index") as drop_index,
         ):
-            risk = audit_current_f2p4_downgrade()
-        self.assertEqual(len(risk.drop_tables), 4)
+            historical = audit_downgrade_source(
+                HISTORICAL_DOWNGRADE_SOURCE, "f2p4_20261022"
+            )
+            current = audit_current_f2p4_downgrade()
+        self.assertEqual(len(historical.drop_tables), 4)
+        self.assertEqual(len(historical.drop_indexes), 3)
+        self.assertEqual(current.drop_tables, ())
+        self.assertEqual(current.drop_indexes, ())
         connect.assert_not_called()
         drop_table.assert_not_called()
         drop_index.assert_not_called()

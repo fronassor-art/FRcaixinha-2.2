@@ -1,8 +1,8 @@
 """IN-07: inventário offline do risco de downgrade F2P4.
 
-Não é um bloqueio instalado no Alembic, nem um validador suficiente
-para SQL arbitrário. O downgrade existente continua DESTRUTIVO e BLOQUEADO
-para uso operacional. Nenhuma conexão, migration ou remoção de dados ocorre.
+Este auditor AST não é o bloqueio do Alembic nem valida SQL arbitrário.
+A revisão F2P4 bloqueia o downgrade no próprio caminho executável.
+Nenhuma conexão, migration ou remoção de dados ocorre neste módulo.
 """
 import ast
 from dataclasses import dataclass
@@ -82,8 +82,8 @@ def audit_current_f2p4_downgrade() -> DowngradeRisk:
 def require_nondestructive_approval(report: DowngradeRisk) -> None:
     """Não há autorização para downgrade F2P4: falhar fechado SEM exceção.
 
-    Este método não é invocado por Alembic. Futuro gate executável
-    requer revisão e autorização específicas, além de proteção operacional.
+    Este helper de auditoria não é invocado por Alembic. A proteção
+    executável está no downgrade da revisão F2P4.
     """
     if not isinstance(report, DowngradeRisk):
         raise ValueError("DOWNGRADE_AUDIT_INVALID")

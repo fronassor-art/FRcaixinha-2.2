@@ -151,13 +151,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_identity_sessions_identity_expires",
-                  table_name="identity_sessions")
-    op.drop_table("identity_sessions")
-    op.drop_index("ix_registration_idempotency_expires",
-                  table_name="registration_idempotency")
-    op.drop_table("registration_idempotency")
-    op.drop_index("ix_email_confirmation_challenges_identity_expires",
-                  table_name="email_confirmation_challenges")
-    op.drop_table("email_confirmation_challenges")
-    op.drop_table("identity_credentials")
+    raise RuntimeError("F2P4_DOWNGRADE_NOT_AUTHORIZED")
