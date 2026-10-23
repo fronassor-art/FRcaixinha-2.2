@@ -198,6 +198,22 @@ class InitialRegistrationPGOfflineTests(unittest.TestCase):
                     )
         self.conn.execute.assert_not_called()
 
+    def test_prepared_digest_with_fake_scrypt_fields_is_denied_before_sql(self):
+        """Um prefixo scrypt$v1$ sem salt e hash válidos não basta."""
+        invalid = replace(
+            self.intent,
+            password_digest=PasswordDigest(
+                "scrypt$v1$16384$8$1$not-valid-base64!$not-a-hash!"
+            ),
+        )
+        with self.assertRaisesRegex(
+            TransactionGateError, "^REGISTRATION_WRITE_DENIED$"
+        ):
+            write_initial_registration_within_transaction(
+                self.conn, intent=invalid,
+            )
+        self.conn.execute.assert_not_called()
+
     def test_claim_returning_wrong_reservation_denied_without_writes(self):
         self.conn.execute.side_effect = [
             Mock(scalar_one_or_none=Mock(return_value=UUID(int=999999)))
