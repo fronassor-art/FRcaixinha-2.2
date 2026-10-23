@@ -1,4 +1,5 @@
 """IN-02: testes sintéticos do writer com SQL compilado, sem banco real."""
+import base64
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -51,7 +52,11 @@ def intent(pj=False):
     return InitialRegistrationIntent(
         PreparedRegistration(identity, party),
         f"local:{IDENTITY}",
-        PasswordDigest("scrypt$v1$16384$8$1$synthetic$synthetic"),
+        PasswordDigest(
+            "scrypt$v1$16384$8$1$"
+            + base64.b64encode(b"S" * 16).decode("ascii") + "$"
+            + base64.b64encode(b"H" * 32).decode("ascii")
+        ),
         "PENDING_EMAIL", challenge, ORIGIN, ATTEMPT, FINGERPRINT,
         NOW + timedelta(minutes=15),
     )
