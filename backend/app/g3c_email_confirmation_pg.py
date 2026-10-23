@@ -11,6 +11,7 @@ A checagem com o EMAIL ATUAL do banco invalida token para outro endereço,
 mas mudanças A→B→A exigem revogação segura/epoch ainda não provados (IN05).
 """
 import hmac
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -48,6 +49,7 @@ def challenge_lock_statement(*, challenge_id: UUID, identity_id: UUID):
             identity.c.status,
             identity.c.email_verified_at,
             credential.c.status,
+            identity.c.updated_at,
         )
         .select_from(
             challenge.join(
@@ -150,6 +152,15 @@ def confirm_initial_email_within_transaction(
                 revoked_at=row[7],
             )
             if not email_challenge_eligible(facts, now=now):
+                return False
+            # Defesa adicional contra desafios antigos após alteração da
+            # identidade, inclusive contato A->B->A. IN-05 ainda exige
+            # garantir updated_at para TODO caminho SQL real de escrita.
+            changed_at = row[13]
+            if (not isinstance(changed_at, datetime)
+                    or changed_at.tzinfo is None
+                    or changed_at.utcoffset() is None
+                    or changed_at > row[4]):
                 return False
             # A emissão criptograficamente vinculou o segredo ao e-mail de
             # origem. Aqui usamos o estado atual da fonte do servidor.
