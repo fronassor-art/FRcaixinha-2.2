@@ -36,3 +36,7 @@ Um timestamp atualizado por `GREATEST(clock_timestamp(), OLD.updated_at+1us)` é
 4. Somente após estado estável gerar **backup consolidado final Git/PG AGE**, recuperar, enviar ao Google Drive privado e verificar SHA/bytes. Exceção obrigatória: **backup preventivo válido antes de migrations/operações estruturais de risco** autorizadas.
 
 **Até este checkpoint: GitHub CI do último código/ensaios offline 415/415 PASS, mas G3-C transacional real continua BLOCKED.** Nenhuma alteração foi feita no banco principal, nas migrations, no Termux ou nos backups históricos.
+
+## Adendo posterior — C16-R12.161 (23/10/2026)
+
+A referência acima ao downgrade destrutivo descreve corretamente o estado deste checkpoint histórico. A proteção efetiva introduzida depois e seus limites estão registrados na nota C16-R12.161 do checkpoint C16-R12.142. Este adendo não altera as evidências nem os portões pendentes documentados acima.

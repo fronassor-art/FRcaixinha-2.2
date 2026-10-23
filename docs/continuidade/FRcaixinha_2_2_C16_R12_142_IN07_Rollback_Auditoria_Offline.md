@@ -1,8 +1,8 @@
 # C16-R12.142 — Correção de senha e auditoria de rollback IN-07 (OFFLINE)
 
-**Data:** 23/10/2026 (America/Belem)  
-**Issues/PRs:** #46, #55 (código DRAFT), #54 (plano DRAFT)  
-**Baseline autoritativo:** `main@751da8f8f380fc45d58de68cf707a3c2f9149777` (sem merge).  
+**Data:** 23/10/2026 (America/Belem)<br>
+**Issues/PRs:** #46, #55 (código DRAFT), #54 (plano DRAFT)<br>
+**Baseline autoritativo:** `main@751da8f8f380fc45d58de68cf707a3c2f9149777` (sem merge).<br>
 **Banco principal:** PostgreSQL 18.2 `frcaixinha_2_2_dev`, Alembic `c16r5_20261020`, F2P4 **NÃO AUTORIZADA/APLICADA**.
 
 ## 1. Falha reproduzida, causa e correção mínima (IN-02)
@@ -52,3 +52,11 @@ Este relatório é **autorrevisão**, não parecer independente do Codex. Solici
 - **F2P4:** não autorizada, não aplicada. Nenhuma mudança no PostgreSQL/Termux/main ou backup consolidado nesta entrega.
 
 **Sequência aprovada pelo proprietário:** fechar desenvolvimento/testes offline → auditoria independente/autorizações → integração GitHub/Termux/checkup e ensaios PG específicos autorizados → backups consolidados Git/PG AGE com prova de restauração e Drive. Backups C16-R12.131/132R1/136 continuam preservados. Backup preventivo antes de risco estrutural autorizado continua obrigatório.
+
+## 5. Nota posterior — C16-R12.161 (23/10/2026)
+
+As referências acima aos quatro `DROP TABLE` e três `DROP INDEX` descrevem o downgrade **histórico** da F2P4 na época deste checkpoint. Elas permanecem como contraexemplo auditável, não como comportamento executável atual. A correção C16-R12.147 foi consolidada no commit `c4709eeb9bd6e9d38af929fc958c9698d58fb5db`: a função executável `downgrade()` da F2P4 agora lança `RuntimeError("F2P4_DOWNGRADE_NOT_AUTHORIZED")` antes de qualquer DDL. A auditoria C16-R12.160 confirmou esse comportamento no commit `c3b8936bb498a0aa935195a0472f6c1a63df9958`.
+
+A [Backend CI #40036882864](https://github.com/fronassor-art/FRcaixinha-2.2/actions/runs/40036882864) concluiu com `SUCCESS` no commit `c3b8936bb498a0aa935195a0472f6c1a63df9958`, com **446 testes** conforme a evidência da execução. A PR #55 permanece **draft, aberta e sem merge**.
+
+O bloqueio do `downgrade()` **não autoriza** o `upgrade()` F2P4, não comprova rollback físico no PostgreSQL e não habilita uso operacional. Provas reais de locks, concorrência, SAVEPOINTs, triggers e rollback ainda dependem de autorização específica. As limitações contratuais, jurídicas e financeiras históricas acima permanecem válidas.

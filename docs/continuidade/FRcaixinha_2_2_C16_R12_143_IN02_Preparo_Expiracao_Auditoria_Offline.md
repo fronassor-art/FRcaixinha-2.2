@@ -1,7 +1,7 @@
 # C16-R12.143 — Gate independente: novo caso adversarial IN-02 e evidências de PR #55
 
-**Data:** 23/10/2026. **Base autoritativa:** `main@751da8f8f380fc45d58de68cf707a3c2f9149777`. PR #55 em DRAFT, sem merge, sem Termux sync, sem escrita no PostgreSQL.  
-**Commit do código offline submetido a CI:** `faafe6defd7c2034e0e993a1712b52869cf8ce1a`.  
+**Data:** 23/10/2026. **Base autoritativa:** `main@751da8f8f380fc45d58de68cf707a3c2f9149777`. PR #55 em DRAFT, sem merge, sem Termux sync, sem escrita no PostgreSQL.<br>
+**Commit do código offline submetido a CI:** `faafe6defd7c2034e0e993a1712b52869cf8ce1a`.<br>
 **Código sujeito a revisão externa:** `backend/app/g3c_initial_registration_pg.py` e novos testes `backend/tests/test_g3c_initial_registration_pg_offline.py`.
 
 ## 1. Reprovação adversarial seguida de correção
@@ -27,3 +27,7 @@
 ## 3. Status final deste checkpoint
 
 **IN-02 nova correção offline:** PASS; **regressão histórica:** PASS; **auditoria independente Codex:** NOT_RUN; **IN-05 triggers real:** BLOCKED; **IN-07 downgrade seguro:** BLOCKED; **IN-06/08 política:** BLOCKED; **F2P4 aplicável:** NOT_AUTHORIZED. Não houve backup consolidado porque ainda não houve integração aprovada. Backups anteriores AGE Git/PG e recuperação C16-R12.131–136 permanecem válidos.
+
+## Adendo posterior — C16-R12.161 (23/10/2026)
+
+A descrição acima de `DROP TABLE` e `DROP INDEX` no downgrade real corresponde ao estado deste checkpoint histórico. A proteção posterior C16-R12.147 e suas limitações estão detalhadas na nota C16-R12.161 do checkpoint C16-R12.142; as evidências IN-02 deste documento permanecem inalteradas.
