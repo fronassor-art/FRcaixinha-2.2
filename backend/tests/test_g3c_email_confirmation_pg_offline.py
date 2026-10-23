@@ -38,6 +38,7 @@ class InitialEmailPostgresOfflineTests(unittest.TestCase):
             CHALLENGE, USER, DIGEST, "INITIAL_EMAIL",
             NOW - timedelta(minutes=1), NOW + timedelta(minutes=9),
             None, None, USER, CONTACT, "PENDENTE", None, "PENDING_EMAIL",
+            NOW - timedelta(minutes=2),
         )
         self._results()
 
@@ -191,14 +192,14 @@ class InitialEmailPostgresOfflineTests(unittest.TestCase):
 
     def test_identity_changed_after_challenge_denies_old_verifier(self):
         """Mesmo A->B->A deve exigir evidência de não alteração desde emissão."""
-        changed_after_issue = self.row + (NOW,)
+        changed_after_issue = self.row[:-1] + (NOW,)
         self._results(row=changed_after_issue)
         self.assertFalse(self._confirm())
         self.assertEqual(self.conn.execute.call_count, 2)
 
     def test_missing_identity_change_epoch_denies_without_update(self):
         """Sem prova temporal confiável não autorizar desafio armazenado."""
-        missing_epoch = self.row + (None,)
+        missing_epoch = self.row[:-1] + (None,)
         self._results(row=missing_epoch)
         self.assertFalse(self._confirm())
         self.assertEqual(self.conn.execute.call_count, 2)
