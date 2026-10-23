@@ -14,7 +14,7 @@ class IdentitySchemaTests(unittest.TestCase):
     def test_only_initial_tables_are_declared(self):
         self.assertEqual(
             set(Base.metadata.tables),
-            {"user_identities", "contracting_parties", "tenants", "cycles", "role_grants", "memberships", "quotas", "license_plans", "license_price_versions", "license_offers", "term_acceptances", "license_payment_obligations", "payments", "payment_attempts", "payment_reconciliation_events", "license_subscriptions", "license_entitlement_segments"},
+            {"user_identities", "contracting_parties", "tenants", "cycles", "role_grants", "memberships", "quotas", "license_plans", "license_price_versions", "license_offers", "term_acceptances", "license_payment_obligations", "payments", "payment_attempts", "payment_reconciliation_events", "license_subscriptions", "license_entitlement_segments", "identity_credentials", "email_confirmation_challenges", "registration_idempotency", "identity_sessions"},
         )
 
     def test_sensitive_documents_are_not_plaintext_columns(self):
