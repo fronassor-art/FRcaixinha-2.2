@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
+from app.identity_draft import normalize_email
+
 
 class TransactionGateError(ValueError):
     """Erro genérico; não revela CPF, e-mail, IDs ou hashes."""
@@ -141,7 +143,7 @@ def email_challenge_eligible(facts: EmailFacts, *, now: datetime) -> bool:
             and type(facts.current_email) is str
             and bool(facts.snapshot_email)
             and facts.snapshot_email == facts.current_email
-            and facts.snapshot_email == facts.snapshot_email.lower()
+            and normalize_email(facts.snapshot_email) == facts.snapshot_email
             and facts.consumed_at is None and facts.revoked_at is None
             and _window(facts.issued_at, facts.expires_at, now,
                         timedelta(minutes=10))
@@ -169,7 +171,7 @@ def session_current_with_server_facts(
             and facts.revoked_at is None
             and _aware(facts.email_verified_at)
             and _aware(facts.credential_updated_at)
-            and facts.email_verified_at <= now
+            and facts.email_verified_at <= facts.issued_at
             and facts.credential_updated_at <= facts.issued_at
             and _window(facts.issued_at, facts.expires_at, now,
                         timedelta(minutes=15))
