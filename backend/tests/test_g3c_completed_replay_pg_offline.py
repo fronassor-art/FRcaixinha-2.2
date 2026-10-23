@@ -1,11 +1,14 @@
 """Compilação SQL e simulações do leitor de replay (sem PostgreSQL real)."""
 import unittest
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, create_autospec
 from uuid import UUID
 
+from psycopg import Connection as PsycopgConnection
+from psycopg.pq import TransactionStatus
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 
 from app.g3c_completed_replay_pg import (
     ReplayRepositoryUnavailable, completed_replay_statement,
@@ -26,6 +29,19 @@ class ReplayPostgresStatementOfflineTests(unittest.TestCase):
     def setUp(self):
         self.conn = create_autospec(Connection, instance=True)
         self.conn.in_transaction.return_value = True
+        self.conn.closed = False
+        self.conn.invalidated = False
+        self.conn.get_transaction.return_value.is_active = True
+        self.conn.dialect = SimpleNamespace(name="postgresql", driver="psycopg")
+        self.conn.engine = create_autospec(Engine, instance=True)
+        self.conn.engine.get_execution_options.return_value = {}
+        self.conn.get_execution_options.return_value = {}
+        self.driver = create_autospec(PsycopgConnection, instance=True)
+        self.driver.autocommit = False
+        self.driver.info = SimpleNamespace(
+            transaction_status=TransactionStatus.INTRANS,
+        )
+        self.conn.connection = SimpleNamespace(driver_connection=self.driver)
         self.row = (
             ORIGIN, ATTEMPT, FINGERPRINT,
             IDENTITY, PARTY, "COMPLETED",
@@ -113,6 +129,12 @@ class ReplayPostgresStatementOfflineTests(unittest.TestCase):
         ) as exc:
             self._read()
         self.assertNotIn("sensitive", str(exc.exception))
+
+    def test_autocommit_denied_before_replay_lock(self):
+        self.driver.autocommit = True
+        with self.assertRaisesRegex(TransactionGateError, "^REPLAY_DENIED$"):
+            self._read()
+        self.conn.execute.assert_not_called()
 
     def test_no_physical_postgresql_or_migration_in_suite(self):
         import inspect

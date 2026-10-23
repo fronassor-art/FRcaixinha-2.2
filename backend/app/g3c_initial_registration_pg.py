@@ -22,6 +22,7 @@ from app.db.models import (
     RegistrationIdempotency, UserIdentity,
 )
 from app.g3c_completed_replay_pg import fetch_verified_completed_replay
+from app.g3c_pg_transaction_guard import require_pg_transaction
 from app.g3c_transaction_guards_offline import TransactionGateError
 from app.identity_draft import normalize_email
 from app.initial_registration_bootstrap import InitialRegistrationIntent
@@ -214,12 +215,9 @@ def write_initial_registration_within_transaction(
     O chamador PRECISA manter a transação externa até decidir COMMIT; o token
     de confirmação não é devolvido nem encaminhado por esta função.
     """
-    if (
-        not isinstance(connection, Connection)
-        or not connection.in_transaction()
-        or not _valid_intent(intent)
-    ):
+    if not _valid_intent(intent):
         raise TransactionGateError("REGISTRATION_WRITE_DENIED")
+    require_pg_transaction(connection, denial="REGISTRATION_WRITE_DENIED")
 
     try:
         with connection.begin_nested():

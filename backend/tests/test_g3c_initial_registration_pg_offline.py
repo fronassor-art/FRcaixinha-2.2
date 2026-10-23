@@ -1,13 +1,16 @@
 """IN-02: testes sintéticos do writer com SQL compilado, sem banco real."""
 import base64
 import unittest
+from types import SimpleNamespace
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, create_autospec, patch
 from uuid import UUID
 
+from psycopg import Connection as PsycopgConnection
+from psycopg.pq import TransactionStatus
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 
 from app.email_confirmation_offline import EmailChallengeRecord
 from app.identity_registration_offline import (
@@ -66,6 +69,19 @@ class InitialRegistrationPGOfflineTests(unittest.TestCase):
     def setUp(self):
         self.conn = create_autospec(Connection, instance=True)
         self.conn.in_transaction.return_value = True
+        self.conn.closed = False
+        self.conn.invalidated = False
+        self.conn.get_transaction.return_value.is_active = True
+        self.conn.dialect = SimpleNamespace(name="postgresql", driver="psycopg")
+        self.conn.engine = create_autospec(Engine, instance=True)
+        self.conn.engine.get_execution_options.return_value = {}
+        self.conn.get_execution_options.return_value = {}
+        self.driver = create_autospec(PsycopgConnection, instance=True)
+        self.driver.autocommit = False
+        self.driver.info = SimpleNamespace(
+            transaction_status=TransactionStatus.INTRANS,
+        )
+        self.conn.connection = SimpleNamespace(driver_connection=self.driver)
         self.intent = intent()
         self.reservation = UUID(int=20020)
 
@@ -306,6 +322,17 @@ class InitialRegistrationPGOfflineTests(unittest.TestCase):
         self.assertNotIn(str(IDENTITY), repr(result))
         self.assertFalse(hasattr(result, "delivery_secret"))
         self.assertFalse(hasattr(result, "password_digest"))
+
+    def test_autocommit_denied_before_reservation_or_savepoint(self):
+        self.driver.autocommit = True
+        with self.assertRaisesRegex(
+            TransactionGateError, "^REGISTRATION_WRITE_DENIED$"
+        ):
+            write_initial_registration_within_transaction(
+                self.conn, intent=self.intent,
+            )
+        self.conn.execute.assert_not_called()
+        self.conn.begin_nested.assert_not_called()
 
     def test_no_pg_connection_creation_or_implicit_service(self):
         import inspect

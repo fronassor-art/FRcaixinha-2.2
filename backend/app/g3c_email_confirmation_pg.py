@@ -21,6 +21,7 @@ from app.db.models import (
     EmailConfirmationChallenge, IdentityCredential, UserIdentity,
 )
 from app.email_confirmation_offline import _digest
+from app.g3c_pg_transaction_guard import require_pg_transaction
 from app.g3c_transaction_guards_offline import (
     EmailFacts, TransactionGateError, email_challenge_eligible,
 )
@@ -118,14 +119,13 @@ def confirm_initial_email_within_transaction(
     não confirma transação externa e não solicita nem emite tokens.
     """
     if (
-        not isinstance(connection, Connection)
-        or not connection.in_transaction()
-        or not isinstance(challenge_id, UUID) or challenge_id.int == 0
+        not isinstance(challenge_id, UUID) or challenge_id.int == 0
         or not isinstance(identity_id, UUID) or identity_id.int == 0
         or challenge_id == identity_id
         or type(candidate) is not bytes or len(candidate) != 32
     ):
         raise TransactionGateError("EMAIL_CONFIRMATION_DENIED")
+    require_pg_transaction(connection, denial="EMAIL_CONFIRMATION_DENIED")
 
     try:
         # O savepoint impede persistir consumo parcial se a escrita de contato

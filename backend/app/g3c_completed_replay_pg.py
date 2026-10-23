@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from app.db.models import ContractingParty, RegistrationIdempotency
+from app.g3c_pg_transaction_guard import require_pg_transaction
 from app.g3c_transaction_guards_offline import (
     CompletedAttempt, PartyLink, TransactionGateError, verified_replay_ids,
 )
@@ -66,14 +67,11 @@ def fetch_verified_completed_replay(
     Lê clock_timestamp() APÓS o lock para não reutilizar a hora anterior a
     uma possível espera longa por transação concorrente.
     """
-    if (
-        not isinstance(connection, Connection)
-        or not connection.in_transaction()
-        or not all(type(d) is bytes and len(d) == 32 for d in (
+    if not all(type(d) is bytes and len(d) == 32 for d in (
             origin_digest, attempt_digest, request_fingerprint,
-        ))
-    ):
+        )):
         raise TransactionGateError("REPLAY_DENIED")
+    require_pg_transaction(connection, denial="REPLAY_DENIED")
 
     statement = completed_replay_statement(
         origin_digest=origin_digest, attempt_digest=attempt_digest,

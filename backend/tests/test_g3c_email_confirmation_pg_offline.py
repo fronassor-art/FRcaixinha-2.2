@@ -4,12 +4,15 @@ Sem conexão a banco, rede, migration ou emissão de e-mail. Estas provas
 examinam SQL compilado, transação externa, savepoint, falhas e negações.
 """
 import unittest
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, create_autospec
 from uuid import UUID
 
+from psycopg import Connection as PsycopgConnection
+from psycopg.pq import TransactionStatus
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 
 from app.email_confirmation_offline import _digest
 from app.g3c_email_confirmation_pg import (
@@ -34,6 +37,19 @@ class InitialEmailPostgresOfflineTests(unittest.TestCase):
     def setUp(self):
         self.conn = create_autospec(Connection, instance=True)
         self.conn.in_transaction.return_value = True
+        self.conn.closed = False
+        self.conn.invalidated = False
+        self.conn.get_transaction.return_value.is_active = True
+        self.conn.dialect = SimpleNamespace(name="postgresql", driver="psycopg")
+        self.conn.engine = create_autospec(Engine, instance=True)
+        self.conn.engine.get_execution_options.return_value = {}
+        self.conn.get_execution_options.return_value = {}
+        self.driver = create_autospec(PsycopgConnection, instance=True)
+        self.driver.autocommit = False
+        self.driver.info = SimpleNamespace(
+            transaction_status=TransactionStatus.INTRANS,
+        )
+        self.conn.connection = SimpleNamespace(driver_connection=self.driver)
         self.row = (
             CHALLENGE, USER, DIGEST, "INITIAL_EMAIL",
             NOW - timedelta(minutes=1), NOW + timedelta(minutes=9),
@@ -203,6 +219,15 @@ class InitialEmailPostgresOfflineTests(unittest.TestCase):
         self._results(row=missing_epoch)
         self.assertFalse(self._confirm())
         self.assertEqual(self.conn.execute.call_count, 2)
+
+    def test_autocommit_denied_before_savepoint_or_email_lock(self):
+        self.driver.autocommit = True
+        with self.assertRaisesRegex(
+            TransactionGateError, "^EMAIL_CONFIRMATION_DENIED$"
+        ):
+            self._confirm()
+        self.conn.execute.assert_not_called()
+        self.conn.begin_nested.assert_not_called()
 
     def test_only_mocked_sql_and_no_api_or_real_connection(self):
         import inspect

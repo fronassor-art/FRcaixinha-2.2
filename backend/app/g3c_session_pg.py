@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from app.db.models import IdentityCredential, IdentitySession, UserIdentity
+from app.g3c_pg_transaction_guard import require_pg_transaction
 from app.g3c_transaction_guards_offline import (
     SessionFacts, TransactionGateError, session_current_with_server_facts,
 )
@@ -60,13 +61,9 @@ def read_current_session_identity(
     na MESMA transação para não abrir janela TOCTOU. O token do cliente não é
     recebido; apenas verificador SHA-256 produzido pelo servidor.
     """
-    if (
-        not isinstance(connection, Connection)
-        or not connection.in_transaction()
-        or type(verifier_sha256) is not bytes
-        or len(verifier_sha256) != 32
-    ):
+    if type(verifier_sha256) is not bytes or len(verifier_sha256) != 32:
         raise TransactionGateError("SESSION_LOOKUP_DENIED")
+    require_pg_transaction(connection, denial="SESSION_LOOKUP_DENIED")
     try:
         row = connection.execute(
             current_session_statement(verifier_sha256=verifier_sha256),

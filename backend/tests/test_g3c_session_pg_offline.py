@@ -1,11 +1,14 @@
 """G3-C / IN04: compilação e stubs SEM conexão a PostgreSQL real."""
 import unittest
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, create_autospec
 from uuid import UUID
 
+from psycopg import Connection as PsycopgConnection
+from psycopg.pq import TransactionStatus
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 
 from app.g3c_session_pg import (
     SessionRepositoryUnavailable, current_session_statement,
@@ -23,6 +26,19 @@ class CurrentSessionPostgresOfflineTests(unittest.TestCase):
     def setUp(self):
         self.conn = create_autospec(Connection, instance=True)
         self.conn.in_transaction.return_value = True
+        self.conn.closed = False
+        self.conn.invalidated = False
+        self.conn.get_transaction.return_value.is_active = True
+        self.conn.dialect = SimpleNamespace(name="postgresql", driver="psycopg")
+        self.conn.engine = create_autospec(Engine, instance=True)
+        self.conn.engine.get_execution_options.return_value = {}
+        self.conn.get_execution_options.return_value = {}
+        self.driver = create_autospec(PsycopgConnection, instance=True)
+        self.driver.autocommit = False
+        self.driver.info = SimpleNamespace(
+            transaction_status=TransactionStatus.INTRANS,
+        )
+        self.conn.connection = SimpleNamespace(driver_connection=self.driver)
         self.row = (
             IDENTITY, IDENTITY, "ATIVA", "ACTIVE",
             NOW - timedelta(minutes=30), NOW - timedelta(minutes=20),
@@ -119,6 +135,12 @@ class CurrentSessionPostgresOfflineTests(unittest.TestCase):
         ) as exc:
             read_current_session_identity(self.conn, verifier_sha256=VERIFIER)
         self.assertNotIn("secret", str(exc.exception))
+
+    def test_autocommit_denied_before_session_lock(self):
+        self.driver.autocommit = True
+        with self.assertRaisesRegex(TransactionGateError, "^SESSION_LOOKUP_DENIED$"):
+            read_current_session_identity(self.conn, verifier_sha256=VERIFIER)
+        self.conn.execute.assert_not_called()
 
     def test_no_role_or_tenant_implicit_authorization(self):
         import inspect
