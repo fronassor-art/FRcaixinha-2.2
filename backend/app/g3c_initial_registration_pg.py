@@ -90,15 +90,18 @@ def _valid_intent(intent: object) -> bool:
                 intent.request_fingerprint, challenge.verifier_sha256))
             and challenge.identity_id == identity.id
             and challenge.email == identity.email
+            and challenge.revoked_at is None
             and isinstance(challenge.issued_at, datetime)
             and challenge.issued_at.tzinfo is not None
             and challenge.issued_at.utcoffset() is not None
             and isinstance(challenge.expires_at, datetime)
             and challenge.expires_at.tzinfo is not None
             and challenge.expires_at.utcoffset() is not None
-            and timedelta(0) < (
-                challenge.expires_at - challenge.issued_at
-            ) <= timedelta(minutes=10)
+            and challenge.expires_at - challenge.issued_at == timedelta(minutes=10)
+            and isinstance(intent.attempt_expires_at, datetime)
+            and intent.attempt_expires_at.tzinfo is not None
+            and intent.attempt_expires_at.utcoffset() is not None
+            and intent.attempt_expires_at - challenge.issued_at == timedelta(minutes=15)
             and isinstance(intent.password_digest, PasswordDigest)
             and type(intent.password_digest.encoded) is str
             and 1 <= len(intent.password_digest.encoded) <= 160
@@ -143,6 +146,7 @@ def complete_attempt_statement(
             table.c.request_fingerprint == intent.request_fingerprint,
             table.c.state == "RESERVED",
             table.c.expires_at > func.clock_timestamp(),
+            func.clock_timestamp() < intent.attempt_expires_at,
         )
         .values(
             state="COMPLETED",
