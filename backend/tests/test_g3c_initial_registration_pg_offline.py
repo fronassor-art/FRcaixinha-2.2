@@ -219,6 +219,40 @@ class InitialRegistrationPGOfflineTests(unittest.TestCase):
             )
         self.conn.execute.assert_not_called()
 
+    def test_prepared_attempt_expiration_guards_final_commit_sql(self):
+        """O escritor não pode transformar preparação vencida em nova tentativa."""
+        statement = complete_attempt_statement(
+            self.intent, reservation_id=self.reservation,
+        )
+        compiled = statement.compile(dialect=postgresql.dialect())
+        sql = str(compiled)
+        self.assertIn("registration_idempotency.expires_at > clock_timestamp()", sql)
+        self.assertIn("clock_timestamp() <", sql)
+        self.assertIn(self.intent.attempt_expires_at, compiled.params.values())
+
+    def test_revoked_challenge_and_invalid_attempt_windows_fail_before_sql(self):
+        for invalid in (
+            replace(self.intent, attempt_expires_at=None),
+            replace(self.intent, attempt_expires_at=NOW.replace(tzinfo=None)),
+            replace(self.intent, attempt_expires_at=NOW + timedelta(minutes=16)),
+            replace(self.intent, attempt_expires_at=NOW + timedelta(minutes=9)),
+            replace(self.intent, challenge=replace(
+                self.intent.challenge, revoked_at=NOW,
+            )),
+            replace(self.intent, challenge=replace(
+                self.intent.challenge, issued_at=NOW + timedelta(minutes=1),
+            )),
+        ):
+            with self.subTest(challenge_revoked=invalid.challenge.revoked_at is not None):
+                self.conn.execute.reset_mock()
+                with self.assertRaisesRegex(
+                    TransactionGateError, "^REGISTRATION_WRITE_DENIED$",
+                ):
+                    write_initial_registration_within_transaction(
+                        self.conn, intent=invalid,
+                    )
+                self.conn.execute.assert_not_called()
+
     def test_claim_returning_wrong_reservation_denied_without_writes(self):
         self.conn.execute.side_effect = [
             Mock(scalar_one_or_none=Mock(return_value=UUID(int=999999)))
