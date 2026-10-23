@@ -189,6 +189,20 @@ class InitialEmailPostgresOfflineTests(unittest.TestCase):
         self.assertIsNone(caught.exception.__cause__)
         self.assertTrue(self.conn.begin_nested.return_value.__exit__.called)
 
+    def test_identity_changed_after_challenge_denies_old_verifier(self):
+        """Mesmo A->B->A deve exigir evidência de não alteração desde emissão."""
+        changed_after_issue = self.row + (NOW,)
+        self._results(row=changed_after_issue)
+        self.assertFalse(self._confirm())
+        self.assertEqual(self.conn.execute.call_count, 2)
+
+    def test_missing_identity_change_epoch_denies_without_update(self):
+        """Sem prova temporal confiável não autorizar desafio armazenado."""
+        missing_epoch = self.row + (None,)
+        self._results(row=missing_epoch)
+        self.assertFalse(self._confirm())
+        self.assertEqual(self.conn.execute.call_count, 2)
+
     def test_only_mocked_sql_and_no_api_or_real_connection(self):
         import inspect
         import app.g3c_email_confirmation_pg as module
