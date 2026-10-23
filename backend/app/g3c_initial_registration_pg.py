@@ -25,7 +25,7 @@ from app.g3c_completed_replay_pg import fetch_verified_completed_replay
 from app.g3c_transaction_guards_offline import TransactionGateError
 from app.identity_draft import normalize_email
 from app.initial_registration_bootstrap import InitialRegistrationIntent
-from app.offline_credentials import PasswordDigest
+from app.offline_credentials import PasswordDigest, _decode_digest
 
 
 class InitialRegistrationStorageUnavailable(RuntimeError):
@@ -102,7 +102,7 @@ def _valid_intent(intent: object) -> bool:
             and isinstance(intent.password_digest, PasswordDigest)
             and type(intent.password_digest.encoded) is str
             and 1 <= len(intent.password_digest.encoded) <= 160
-            and intent.password_digest.encoded.startswith("scrypt$v1$")
+            and _decode_digest(intent.password_digest) is not None
         )
     except Exception:
         return False
