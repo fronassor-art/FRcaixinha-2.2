@@ -1,7 +1,7 @@
-"""C16-R12.126: IN-07/IN-08, provas OFFLINE dos limites de DDL e TTL.
+"""IN-07/IN-08: bloqueio F2P4 e limites offline de DDL e TTL.
 
-Os testes de riscos passam porque comprovam lacunas: nao executam
-downgrade, DROP TABLE, DELETE, conexao PostgreSQL ou cron de limpeza.
+O contraexemplo destrutivo original permanece congelado nos testes de
+auditoria F2P4. Nenhum teste aplica migration ou consulta PostgreSQL.
 """
 
 import io
@@ -81,42 +81,40 @@ class G3C4In07In08OfflineTests(unittest.TestCase):
             method()
         return output.getvalue()
 
-    def test_in07_downgrade_compiles_four_destructive_table_drops(self):
-        sql = self.render(revision.downgrade)
-        self.assertEqual(sql.count("DROP TABLE "), 4)
-        self.assertEqual(sql.count("DROP INDEX "), 3)
-        for name in NEW_TABLES:
-            self.assertIn(f"DROP TABLE {name};", sql)
-        # A lack of CASCADE is not a guarantee that those rows survive.
-        self.assertNotIn("CASCADE", sql)
-
-    def test_in07_downgrade_order_and_no_existing_table_drop(self):
-        sql = self.render(revision.downgrade)
-        positions = [sql.index(f"DROP TABLE {name};")
-                     for name in reversed(NEW_TABLES)]
-        self.assertEqual(positions, sorted(positions))
-        for existing in ("user_identities", "contracting_parties", "payments"):
-            self.assertNotIn(f"DROP TABLE {existing}", sql)
-
-    def test_in07_missing_data_guard_does_not_make_downgrade_safe(self):
-        """Counterexample: DDL compiles without a row-count safety gate."""
+    def test_in07_downgrade_has_no_executable_drop_calls(self):
         source = inspect.getsource(revision.downgrade)
-        self.assertEqual(source.count("op.drop_table("), 4)
+        self.assertNotIn("op.drop_table(", source)
+        self.assertNotIn("op.drop_index(", source)
+        self.assertIn('raise RuntimeError("F2P4_DOWNGRADE_NOT_AUTHORIZED")',
+                      source)
+
+    def test_in07_downgrade_guard_precedes_any_alembic_operation(self):
+        with patch.object(revision, "op") as operations:
+            with self.assertRaisesRegex(
+                RuntimeError, "^F2P4_DOWNGRADE_NOT_AUTHORIZED$"
+            ):
+                revision.downgrade()
+        self.assertEqual(operations.method_calls, [])
+
+    def test_in07_guard_has_no_row_count_bypass(self):
+        source = inspect.getsource(revision.downgrade)
         self.assertNotIn("SELECT", source)
         self.assertNotIn("row_count", source)
-        sql = self.render(revision.downgrade)
-        self.assertNotIn("INSERT INTO", sql)
-        self.assertNotIn("COPY ", sql)
-        # This test MUST NOT be interpreted as an actual restore trial.
+        self.assertNotIn("getenv", source)
+        self.assertNotIn("op.", source)
+        # The historical seven-DROP counterexample remains in the audit tests.
 
-    def test_in07_upgrade_create_downgrade_drop_is_not_data_recovery(self):
+    def test_in07_upgrade_remains_available_without_data_recovery_claim(self):
         upgrade = self.render(revision.upgrade)
-        downgrade = self.render(revision.downgrade)
         self.assertEqual(upgrade.count("CREATE TABLE "), 4)
-        self.assertEqual(downgrade.count("DROP TABLE "), 4)
+        self.assertEqual(upgrade.count("CREATE INDEX "), 3)
         for name in NEW_TABLES:
             self.assertIn(f"CREATE TABLE {name}", upgrade)
-            self.assertIn(f"DROP TABLE {name}", downgrade)
+        with self.assertRaisesRegex(
+            RuntimeError, "^F2P4_DOWNGRADE_NOT_AUTHORIZED$"
+        ):
+            self.render(revision.downgrade)
+        # This offline test does not establish real PostgreSQL rollback.
 
     def test_in08_check_constraints_limit_age_but_do_not_delete(self):
         cases = (
@@ -209,7 +207,10 @@ class G3C4In07In08OfflineTests(unittest.TestCase):
     def test_in07_in08_ddl_inspection_never_opens_postgres(self):
         with patch("psycopg.connect") as pg:
             self.render(revision.upgrade)
-            self.render(revision.downgrade)
+            with self.assertRaisesRegex(
+                RuntimeError, "^F2P4_DOWNGRADE_NOT_AUTHORIZED$"
+            ):
+                self.render(revision.downgrade)
             str(CreateIndex(next(iter(
                 RegistrationIdempotency.__table__.indexes
             ))).compile(dialect=dialect()))

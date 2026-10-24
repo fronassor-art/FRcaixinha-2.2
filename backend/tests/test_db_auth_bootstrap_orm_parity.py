@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import dialect
 from sqlalchemy.schema import CreateIndex, CreateTable
 
 from app.db.models import (
-    Base, EmailConfirmationChallenge, IdentityCredential,
+    Base, ContractingParty, EmailConfirmationChallenge, IdentityCredential,
     IdentitySession, RegistrationIdempotency,
 )
 from migrations.versions import f2p4_20261022_auth_bootstrap_draft as revision
@@ -96,6 +96,33 @@ class AuthBootstrapOrmParityTests(unittest.TestCase):
                     ))
                 )
                 self.assertEqual(actual, mapped)
+
+    def test_historical_party_actor_constraints_match_orm(self):
+        sql = self.render_upgrade()
+        party = ContractingParty.__table__
+        registration = RegistrationIdempotency.__table__
+        self.assertTrue(party.c.initial_registration_identity_id.nullable)
+        self.assertIn(
+            "uq_contracting_parties_id_initial_registration_identity",
+            {constraint.name for constraint in party.constraints},
+        )
+        historical_fk = next(
+            constraint for constraint in registration.constraints
+            if constraint.name == "fk_registration_idempotency_initial_party_actor"
+        )
+        self.assertEqual(historical_fk.onupdate, "RESTRICT")
+        self.assertEqual(historical_fk.ondelete, "RESTRICT")
+        self.assertEqual(
+            [element.target_fullname for element in historical_fk.elements],
+            ["contracting_parties.id",
+             "contracting_parties.initial_registration_identity_id"],
+        )
+        self.assertIn("initial_registration_identity_id UUID", sql)
+        self.assertIn("FOREIGN KEY(party_id, identity_id)", sql)
+        self.assertIn(
+            "REFERENCES contracting_parties "
+            "(id, initial_registration_identity_id)", sql,
+        )
 
     def test_all_three_create_index_fragments_match_orm(self):
         sql = self.render_upgrade()
