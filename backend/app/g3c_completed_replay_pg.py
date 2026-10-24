@@ -57,7 +57,7 @@ def replay_party_lock_statement(*, party_id: UUID):
     party = ContractingParty.__table__
     return select(
         party.c.id, party.c.party_type, party.c.pf_user_id,
-        party.c.representative_user_id,
+        party.c.representative_user_id, party.c.initial_registration_identity_id,
     ).where(party.c.id == party_id).with_for_update(of=party)
 
 
@@ -125,6 +125,7 @@ def fetch_verified_completed_replay(
         party = PartyLink(
             id=party_row[0], party_type=party_row[1], pf_user_id=party_row[2],
             representative_user_id=party_row[3],
+            initial_registration_identity_id=party_row[4],
         )
         return verified_replay_ids(
             stored, party, origin_digest=origin_digest,

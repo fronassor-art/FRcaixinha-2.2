@@ -53,7 +53,7 @@ class ReplayPostgresStatementOfflineTests(unittest.TestCase):
             IDENTITY, PARTY, "COMPLETED",
             NOW - timedelta(minutes=1), NOW + timedelta(minutes=14),
         )
-        self.party = (PARTY, "PF", IDENTITY, None)
+        self.party = (PARTY, "PF", IDENTITY, None, IDENTITY)
         self._load()
 
     def _load(self, *, reserved="DEFAULT", identity=IDENTITY,
@@ -93,6 +93,7 @@ class ReplayPostgresStatementOfflineTests(unittest.TestCase):
         self.assertNotIn(" JOIN ", sql[0])
         self.assertIn("FOR UPDATE OF user_identities", sql[1])
         self.assertIn("FOR UPDATE OF contracting_parties", sql[2])
+        self.assertIn("initial_registration_identity_id", sql[2])
         self.assertNotIn("FOR UPDATE", sql[3])
         self.assertTrue(all("INSERT INTO" not in value for value in sql))
 
@@ -111,8 +112,18 @@ class ReplayPostgresStatementOfflineTests(unittest.TestCase):
         self.conn.begin_nested.assert_not_called()
 
     def test_matching_completed_pj_returns_existing_only(self):
-        self._load(party=(PARTY, "PJ", None, IDENTITY))
+        self._load(party=(PARTY, "PJ", None, IDENTITY, IDENTITY))
         self.assertEqual(self._read(), (IDENTITY, PARTY))
+
+    def test_pj_representative_change_keeps_historical_replay(self):
+        self._load(party=(PARTY, "PJ", None, UUID(int=999), IDENTITY))
+        self.assertEqual(self._read(), (IDENTITY, PARTY))
+        self.conn.commit.assert_not_called()
+
+    def test_pj_crossed_historical_actor_is_denied(self):
+        self._load(party=(PARTY, "PJ", None, IDENTITY, UUID(int=999)))
+        with self.assertRaisesRegex(TransactionGateError, "^REPLAY_DENIED$"):
+            self._read()
 
     def test_requires_existing_explicit_transaction(self):
         self.conn.in_transaction.return_value = False
@@ -144,7 +155,7 @@ class ReplayPostgresStatementOfflineTests(unittest.TestCase):
         self.assertEqual(self.conn.execute.call_count, 2)
 
     def test_missing_or_changed_party_denied_before_recheck(self):
-        for party in (None, (UUID(int=999), "PF", IDENTITY, None)):
+        for party in (None, (UUID(int=999), "PF", IDENTITY, None, IDENTITY)):
             with self.subTest(party=party):
                 self.conn.execute.reset_mock()
                 self._load(party=party)
@@ -160,7 +171,7 @@ class ReplayPostgresStatementOfflineTests(unittest.TestCase):
         self.assertEqual(self.conn.execute.call_count, 4)
 
     def test_crossed_pf_identity_is_denied(self):
-        self._load(party=(PARTY, "PF", UUID(int=100), None))
+        self._load(party=(PARTY, "PF", UUID(int=100), None, IDENTITY))
         with self.assertRaisesRegex(TransactionGateError, "^REPLAY_DENIED$"):
             self._read()
 

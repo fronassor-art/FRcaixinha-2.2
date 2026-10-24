@@ -34,6 +34,7 @@ class PartyLink:
     party_type: str
     pf_user_id: UUID | None
     representative_user_id: UUID | None
+    initial_registration_identity_id: UUID | None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -104,6 +105,8 @@ def verified_replay_ids(
             and _uuid(stored.identity_id) and _uuid(stored.party_id)
             and stored.identity_id != stored.party_id
             and _uuid(party.id) and stored.party_id == party.id
+            and _uuid(party.initial_registration_identity_id)
+            and party.initial_registration_identity_id == stored.identity_id
             and all(_digest(x) for x in (
                 stored.origin_digest, stored.attempt_digest, stored.fingerprint,
                 origin_digest, attempt_digest, request_fingerprint))
@@ -116,7 +119,7 @@ def verified_replay_ids(
                   and party.pf_user_id == stored.identity_id
                   and party.representative_user_id is None)
                  or (party.party_type == "PJ"
-                     and party.representative_user_id == stored.identity_id
+                     and _uuid(party.representative_user_id)
                      and party.pf_user_id is None))
         )
         if valid:

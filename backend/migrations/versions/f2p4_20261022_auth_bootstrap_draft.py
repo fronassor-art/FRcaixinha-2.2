@@ -24,6 +24,22 @@ _TABLE_ORDER = (
 
 
 def upgrade() -> None:
+    # This existing draft revision extends the C15 party table without changing C15.
+    # NULL means a party has no initial registration through this flow.
+    op.add_column(
+        "contracting_parties",
+        sa.Column("initial_registration_identity_id",
+                  postgresql.UUID(as_uuid=True), nullable=True),
+    )
+    op.create_foreign_key(
+        "fk_contracting_parties_initial_registration_identity",
+        "contracting_parties", "user_identities",
+        ["initial_registration_identity_id"], ["id"], ondelete="RESTRICT",
+    )
+    op.create_unique_constraint(
+        "uq_contracting_parties_id_initial_registration_identity",
+        "contracting_parties", ["id", "initial_registration_identity_id"],
+    )
     op.create_table(
         "identity_credentials",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -104,6 +120,13 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["party_id"], ["contracting_parties.id"],
                                 name="fk_registration_idempotency_party_id_contracting_parties",
                                 ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["party_id", "identity_id"],
+            ["contracting_parties.id",
+             "contracting_parties.initial_registration_identity_id"],
+            name="fk_registration_idempotency_initial_party_actor",
+            ondelete="RESTRICT", onupdate="RESTRICT",
+        ),
         sa.CheckConstraint(
             "octet_length(origin_digest) = 32 AND "
             "octet_length(attempt_digest) = 32 AND "

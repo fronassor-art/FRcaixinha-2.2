@@ -139,6 +139,10 @@ class InitialRegistrationPGOfflineTests(unittest.TestCase):
             "email_confirmation_challenges",
         ):
             self.assertIn(name, sql)
+        party_params = self.conn.execute.call_args_list[2].args[0].compile(
+            dialect=postgresql.dialect(),
+        ).params
+        self.assertEqual(party_params["initial_registration_identity_id"], IDENTITY)
         self.assertIn("INTERVAL '10 minutes'", sql)
         self.assertNotIn("COMMIT", sql)
         self.assertNotIn("role_grants", sql)
@@ -155,6 +159,8 @@ class InitialRegistrationPGOfflineTests(unittest.TestCase):
         self.assertIn("contracting_parties", str(compiled))
         self.assertIn("PRELIMINAR", compiled.params.values())
         self.assertNotIn("APTO", compiled.params.values())
+        self.assertEqual(compiled.params["initial_registration_identity_id"],
+                         IDENTITY)
 
     def test_duplicate_completed_uses_trusted_replay_only(self):
         self.conn.execute.side_effect = [

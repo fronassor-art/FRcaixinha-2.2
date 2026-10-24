@@ -61,6 +61,29 @@ class AuthBootstrapMigrationDraftTests(unittest.TestCase):
         self.assertNotIn("CASCADE", sql)
         self.assertNotIn("INSERT INTO", sql)
 
+    def test_completed_historical_actor_constraint_precedes_registration(self):
+        sql = self.render(revision.upgrade)
+        self.assertIn(
+            "ALTER TABLE contracting_parties ADD COLUMN "
+            "initial_registration_identity_id UUID", sql,
+        )
+        self.assertIn(
+            "uq_contracting_parties_id_initial_registration_identity", sql,
+        )
+        self.assertIn(
+            "fk_contracting_parties_initial_registration_identity", sql,
+        )
+        self.assertIn("FOREIGN KEY(party_id, identity_id)", sql)
+        self.assertIn(
+            "REFERENCES contracting_parties "
+            "(id, initial_registration_identity_id)", sql,
+        )
+        self.assertIn("fk_registration_idempotency_initial_party_actor", sql)
+        self.assertLess(
+            sql.index("uq_contracting_parties_id_initial_registration_identity"),
+            sql.index("CREATE TABLE registration_idempotency"),
+        )
+
     def test_downgrade_is_denied_before_any_alembic_operation(self):
         with patch.object(revision, "op") as operations:
             with self.assertRaisesRegex(

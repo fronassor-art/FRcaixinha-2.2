@@ -25,7 +25,7 @@ class OfflineTransactionGuardsTests(unittest.TestCase):
             "COMPLETED", NOW - timedelta(minutes=2),
             NOW + timedelta(minutes=13),
         )
-        self.party = PartyLink(PARTY, "PF", IDENTITY, None)
+        self.party = PartyLink(PARTY, "PF", IDENTITY, None, IDENTITY)
         self.claim = dict(
             origin_digest=HASH_A, attempt_digest=HASH_B,
             request_fingerprint=HASH_C, now=NOW,
@@ -58,20 +58,30 @@ class OfflineTransactionGuardsTests(unittest.TestCase):
         )
 
     def test_in01_pj_completed_matching_link(self):
-        pj = PartyLink(PARTY, "PJ", None, IDENTITY)
+        pj = PartyLink(PARTY, "PJ", None, IDENTITY, IDENTITY)
         self.assertEqual(
             verified_replay_ids(self.attempt, pj, **self.claim),
             (IDENTITY, PARTY),
         )
+
+    def test_in01_pj_representative_change_preserves_historical_replay(self):
+        party = PartyLink(PARTY, "PJ", None, UUID(int=7777), IDENTITY)
+        self.assertEqual(
+            verified_replay_ids(self.attempt, party, **self.claim),
+            (IDENTITY, PARTY),
+        )
+        self.assertFalse(hasattr(party, "role_grant"))
+        self.assertFalse(hasattr(party, "tenant_id"))
 
     def test_in01_crossed_foreign_keys_denied(self):
         for party in (
             replace(self.party, pf_user_id=UUID(int=7777)),
             replace(self.party, id=UUID(int=9999)),
             replace(self.party, representative_user_id=UUID(int=9999)),
-            PartyLink(PARTY, "PJ", None, UUID(int=7777)),
-            PartyLink(PARTY, "PJ", IDENTITY, IDENTITY),
-            PartyLink(PARTY, "??", IDENTITY, None),
+            replace(self.party, initial_registration_identity_id=UUID(int=7777)),
+            replace(self.party, initial_registration_identity_id=None),
+            PartyLink(PARTY, "PJ", IDENTITY, IDENTITY, IDENTITY),
+            PartyLink(PARTY, "??", IDENTITY, None, IDENTITY),
         ):
             with self.subTest(party=party.party_type):
                 self.assertReplayDenied(party=party)

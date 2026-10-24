@@ -182,6 +182,7 @@ def _write_identity_party_credential_challenge(
         legal_name=party.legal_name,
         pf_user_id=party.pf_user_id,
         representative_user_id=party.representative_user_id,
+        initial_registration_identity_id=identity.id,
         tax_id_ciphertext=party.tax_id_ciphertext,
         tax_id_lookup_hmac=party.tax_id_lookup_hmac,
         status="PRELIMINAR",
