@@ -1,5 +1,6 @@
 """IN03/04/05 — prova offline dos limites do relógio e plano de revogação."""
 import inspect
+import re
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -10,6 +11,16 @@ from app.g3c_updated_at_trigger_plan_offline import proposed_timestamp_ddl
 
 
 class ArtifactInvalidationPlanOfflineTests(unittest.TestCase):
+    def test_identity_and_credential_updates_use_one_lock_order(self):
+        expected = ["email_confirmation_challenges", "identity_sessions"]
+        for statement in proposed_artifact_invalidation_ddl()[::2]:
+            with self.subTest(function=statement.splitlines()[0]):
+                updates = re.findall(
+                    r"(?m)^ *UPDATE public[.]([a-z_]+)[ ]*$",
+                    statement,
+                )
+                self.assertEqual(updates, expected)
+
     def test_clock_rollback_counterexample_demonstrates_timestamp_only_gap(self):
         """Um relógio que retrocede pode deixar updated_at < issued_at."""
         issued = datetime(2026, 10, 23, 13, 0, tzinfo=timezone.utc)

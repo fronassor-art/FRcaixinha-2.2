@@ -44,15 +44,15 @@ AS $frc22_credential$
 BEGIN
     IF OLD.password_digest IS DISTINCT FROM NEW.password_digest
        OR OLD.status IS DISTINCT FROM NEW.status THEN
-        UPDATE public.identity_sessions
-        SET revoked_at = clock_timestamp()
-        WHERE identity_id = NEW.identity_id
-          AND revoked_at IS NULL;
-
         UPDATE public.email_confirmation_challenges
         SET revoked_at = clock_timestamp()
         WHERE identity_id = NEW.identity_id
           AND consumed_at IS NULL
+          AND revoked_at IS NULL;
+
+        UPDATE public.identity_sessions
+        SET revoked_at = clock_timestamp()
+        WHERE identity_id = NEW.identity_id
           AND revoked_at IS NULL;
     END IF;
     RETURN NEW;
