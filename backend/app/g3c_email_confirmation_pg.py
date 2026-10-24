@@ -31,40 +31,46 @@ class EmailConfirmationStorageUnavailable(RuntimeError):
     """Erro genérico de falha transacional, sem detalhes de banco ou token."""
 
 
+class _EmailDenied(RuntimeError):
+    """Sinal interno para reverter o SAVEPOINT antes de devolver False."""
+
+
+def challenge_lookup_statement(*, challenge_id: UUID):
+    """Localiza apenas um candidato; não autoriza consumo ou acesso."""
+    challenge = EmailConfirmationChallenge.__table__
+    return select(challenge.c.id, challenge.c.identity_id).where(
+        challenge.c.id == challenge_id,
+    )
+
+
+def email_identity_lock_statement(*, identity_id: UUID):
+    identity = UserIdentity.__table__
+    return select(
+        identity.c.id, identity.c.email, identity.c.status,
+        identity.c.email_verified_at, identity.c.updated_at,
+    ).where(identity.c.id == identity_id).with_for_update(of=identity)
+
+
+def email_credential_lock_statement(*, identity_id: UUID):
+    credential = IdentityCredential.__table__
+    return select(
+        credential.c.identity_id, credential.c.status,
+    ).where(credential.c.identity_id == identity_id).with_for_update(
+        of=credential,
+    )
+
+
 def challenge_lock_statement(*, challenge_id: UUID, identity_id: UUID):
     challenge = EmailConfirmationChallenge.__table__
-    identity = UserIdentity.__table__
-    credential = IdentityCredential.__table__
-    return (
-        select(
-            challenge.c.id,
-            challenge.c.identity_id,
-            challenge.c.verifier_sha256,
-            challenge.c.purpose,
-            challenge.c.issued_at,
-            challenge.c.expires_at,
-            challenge.c.consumed_at,
-            challenge.c.revoked_at,
-            identity.c.id,
-            identity.c.email,
-            identity.c.status,
-            identity.c.email_verified_at,
-            credential.c.status,
-            identity.c.updated_at,
-        )
-        .select_from(
-            challenge.join(
-                identity, challenge.c.identity_id == identity.c.id,
-            ).join(
-                credential, credential.c.identity_id == identity.c.id,
-            )
-        )
-        .where(
-            challenge.c.id == challenge_id,
-            challenge.c.identity_id == identity_id,
-        )
-        .with_for_update(of=(challenge, identity, credential))
-    )
+    return select(
+        challenge.c.id, challenge.c.identity_id,
+        challenge.c.verifier_sha256, challenge.c.purpose,
+        challenge.c.issued_at, challenge.c.expires_at,
+        challenge.c.consumed_at, challenge.c.revoked_at,
+    ).where(
+        challenge.c.id == challenge_id,
+        challenge.c.identity_id == identity_id,
+    ).with_for_update(of=challenge)
 
 
 def challenge_consume_statement(
@@ -112,11 +118,10 @@ def confirm_initial_email_within_transaction(
     connection: Connection, *,
     challenge_id: UUID, identity_id: UUID, candidate: bytes,
 ) -> bool:
-    """Consome desafio e verifica contato num SAVEPOINT ou desfaz as duas ações.
+    """Consome H após I→C→H no SAVEPOINT; o chamador possui a transação externa.
 
-    O chamador controla a transação EXTERNA e deve tratá-la como parte do fluxo
-    maior de cadastro (inclusive COMMIT/ROLLBACK). A função não abre conexões,
-    não confirma transação externa e não solicita nem emite tokens.
+    Uma negação reverte o SAVEPOINT e libera os locks nele adquiridos. Sucesso
+    libera apenas o SAVEPOINT; não confirma a transação externa nem emite token.
     """
     if (
         not isinstance(challenge_id, UUID) or challenge_id.int == 0
@@ -128,64 +133,78 @@ def confirm_initial_email_within_transaction(
     require_pg_transaction(connection, denial="EMAIL_CONFIRMATION_DENIED")
 
     try:
-        # O savepoint impede persistir consumo parcial se a escrita de contato
-        # falhar e a transação do chamador continuar.
         with connection.begin_nested():
-            row = connection.execute(challenge_lock_statement(
+            found = connection.execute(challenge_lookup_statement(
+                challenge_id=challenge_id,
+            )).one_or_none()
+            if found is None or found[0] != challenge_id or found[1] != identity_id:
+                raise _EmailDenied
+
+            identity = connection.execute(email_identity_lock_statement(
+                identity_id=identity_id,
+            )).one_or_none()
+            if identity is None or identity[0] != identity_id:
+                raise _EmailDenied
+
+            credential = connection.execute(email_credential_lock_statement(
+                identity_id=identity_id,
+            )).one_or_none()
+            if credential is None or credential[0] != identity_id:
+                raise _EmailDenied
+
+            challenge = connection.execute(challenge_lock_statement(
                 challenge_id=challenge_id, identity_id=identity_id,
             )).one_or_none()
-            if row is None:
-                return False
+            if (challenge is None or challenge[0] != challenge_id
+                    or challenge[1] != identity_id):
+                raise _EmailDenied
+
             now = connection.execute(select(func.clock_timestamp())).scalar_one()
-            if row[11] is not None or row[12] != "PENDING_EMAIL":
-                return False
+            if identity[3] is not None or credential[1] != "PENDING_EMAIL":
+                raise _EmailDenied
             facts = EmailFacts(
-                challenge_identity_id=row[1],
-                identity_id=row[8],
-                snapshot_email=row[9],
-                current_email=row[9],
-                identity_status=row[10],
-                purpose=row[3],
-                issued_at=row[4],
-                expires_at=row[5],
-                consumed_at=row[6],
-                revoked_at=row[7],
+                challenge_identity_id=challenge[1],
+                identity_id=identity[0],
+                snapshot_email=identity[1],
+                current_email=identity[1],
+                identity_status=identity[2],
+                purpose=challenge[3],
+                issued_at=challenge[4],
+                expires_at=challenge[5],
+                consumed_at=challenge[6],
+                revoked_at=challenge[7],
             )
             if not email_challenge_eligible(facts, now=now):
-                return False
-            # Defesa adicional contra desafios antigos após alteração da
-            # identidade, inclusive contato A->B->A. IN-05 ainda exige
-            # garantir updated_at para TODO caminho SQL real de escrita.
-            changed_at = row[13]
+                raise _EmailDenied
+            changed_at = identity[4]
             if (not isinstance(changed_at, datetime)
                     or changed_at.tzinfo is None
                     or changed_at.utcoffset() is None
-                    or changed_at > row[4]):
-                return False
-            # A emissão criptograficamente vinculou o segredo ao e-mail de
-            # origem. Aqui usamos o estado atual da fonte do servidor.
-            expected = _digest(row[0], row[8], row[9], candidate)
+                    or changed_at > challenge[4]):
+                raise _EmailDenied
+            expected = _digest(challenge[0], identity[0], identity[1], candidate)
             if not (
-                type(row[2]) is bytes and len(row[2]) == 32
-                and hmac.compare_digest(expected, row[2])
+                type(challenge[2]) is bytes and len(challenge[2]) == 32
+                and hmac.compare_digest(expected, challenge[2])
             ):
-                return False
+                raise _EmailDenied
 
             consumed = connection.execute(challenge_consume_statement(
                 challenge_id=challenge_id, identity_id=identity_id,
-                verifier_sha256=row[2],
+                verifier_sha256=challenge[2],
             )).scalar_one_or_none()
             if consumed != challenge_id:
-                return False
+                raise _EmailDenied
             verified = connection.execute(identity_verify_statement(
-                identity_id=identity_id, email=row[9],
+                identity_id=identity_id, email=identity[1],
             )).scalar_one_or_none()
             if verified != identity_id:
-                # Não devolver False após consumir: FORÇAR rollback ao savepoint.
                 raise EmailConfirmationStorageUnavailable(
                     "EMAIL_CONFIRMATION_STORAGE_UNAVAILABLE"
                 )
             return True
+    except _EmailDenied:
+        return False
     except Exception:
         raise EmailConfirmationStorageUnavailable(
             "EMAIL_CONFIRMATION_STORAGE_UNAVAILABLE"
