@@ -1,0 +1,19 @@
+name: PR metadata signal
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  signal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Signal metadata refresh without checkout or PR code
+        run: printf '%s\n' 'PR metadata signal only; no functional tests or verdict'
