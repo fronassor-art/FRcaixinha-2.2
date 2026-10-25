@@ -1,0 +1,37 @@
+name: PR metadata sync
+
+on:
+  workflow_run:
+    workflows: [Backend CI, Flutter CI, Android APK CI, PR metadata tests, PR metadata signal]
+    types: [requested, in_progress, completed]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-metadata-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository == 'fronassor-art/FRcaixinha-2.2'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted main only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Update controlled PR body block
+        run: python -B .github/scripts/pr_status_sync.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
