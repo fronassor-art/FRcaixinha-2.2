@@ -613,3 +613,52 @@ Fonte detalhada, evidencias, ADR/ERR e limites:
 [checkpoint C16-R12.37](FRcaixinha_2_2_C16_R12_37_Restauracao_Estrutural_Pos_Migration.md).
 Proximo gate: integrar documento, sincronizar Termux e retomar requisitos
 funcionais da Fase 2 sem repetir restauracao ou migration.
+
+## Adendo de continuidade C235 — estado após C234 (25/10/2026)
+
+Este adendo atualiza a fotografia do projeto, sem alterar o Contrato Técnico
+Mestre, os ADR/ERR aprovados ou os checkpoints históricos acima. A PR #55 foi
+integrada por merge commit na `main` `98526e2ae96bc270c4b45c026354c342cabeb966`
+(pais `751da8f8f380fc45d58de68cf707a3c2f9149777` e
+`61041beb31d0cebbb24d682bea0ee84e1c20a49b`). C225 corrigiu o manifesto
+offline F2P4; C226 auditou a correção; C227–C233 prepararam, versionaram,
+publicaram, auditaram e integraram o pacote. C234 sincronizou a `main` no
+Termux. Backend CI #40161734178 e regressão oficial Termux C234: 508/508
+PASS; a execução Termux foi informada e aprovada pelo Administrador Master,
+não repetida neste adendo.
+
+Backup Git AGE C234 `FRcaixinha_2_2_C234_GIT_98526e2ae96b_20261025_021703.bundle.age`:
+SHA-256 `336274e33068f1e9144903872592aea563ea576bf42e428357538c04f484eb15`,
+recuperação independente e cópia privada Google Drive confirmadas no checkpoint.
+O hash local foi reconferido em C235. Backup Git não substitui backup
+PostgreSQL; nenhum novo dump ou restore SQL decorre da integração. O único
+banco autoritativo permanece `frcaixinha_2_2_dev`, PostgreSQL 18.2. A última
+revisão estrutural comprovada antes deste adendo era `c16r5_20261020`; a
+F2P4 não foi aplicada, e seu downgrade executável está bloqueado.
+
+**Fases:** Fase 0 concluída; Fase 1 bootstrap concluída; Fase 2 em andamento;
+Fases 3–7 não concluídas. O conjunto F2-01 a F2-13 mantém a classificação
+do painel da [Issue #46](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46):
+F2-01 identidade do banco PASS; F2-02 migrations PARCIAL; F2-03 entidades
+PARCIAL; F2-04 FKs/índices/isolamento PARCIAL; F2-05 cadastro PF PASS OFFLINE;
+F2-06 cadastro PJ PASS OFFLINE; F2-07 credenciais/sessões PASS OFFLINE;
+F2-08 convites PARCIAL; F2-09 admissão operacional NÃO COMPROVADA; F2-10
+autorização tenant/Master PARCIAL/PASS OFFLINE; F2-11 consentimento PARCIAL;
+F2-12 ciclos PARCIAL; F2-13 LGPD/logs/segredos PARCIAL. Nenhum PASS OFFLINE
+equivale à ativação de endpoint ou à prova transacional PostgreSQL.
+
+**IN-01 a IN-08:** os módulos e testes preparatórios da PR #55 estão na
+`main`, mas a prova física de duas conexões, locks, SAVEPOINT e rollback
+permanece NOT_RUN. IN-05 tem triggers apenas propostos, não instalados.
+IN-06 ainda requer decisões operacionais/jurídicas de titularidade,
+representação, contestação e recuperação; IN-08 requer política de retenção
+e expurgo aprovada. Não liberar CPF/CNPJ/e-mail por mera expiração. Cadastro,
+login, e-mail real, Pix e operações financeiras continuam desabilitados.
+
+**Procedimento:** ChatGPT orienta com base normativa; Codex no Termux
+inspeciona, implementa e verifica apenas sob G2; o proprietário executa atos
+interativos em Termux/Debian PRoot independente quando o Codex não dispõe do
+executor; GitHub CI é evidência separada. Preservar uma raiz, um repositório,
+um banco e os backups recuperáveis. A sincronização automática de metadados
+de PR é proposta C236 em avaliação: uma PR de workflow não a torna ativa;
+auditoria, autorização de merge e prova real pós-merge serão gates próprios.

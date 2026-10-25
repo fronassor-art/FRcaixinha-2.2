@@ -229,3 +229,25 @@ PostgreSQL autoritativo `frcaixinha_2_2_dev`, 18.2, revisão
 de aplicação não comprovada. Fase 2 em andamento; rotação, persistência,
 integração API, autorização operacional e fluxos financeiros permanecem
 pendentes. Fase 3 não iniciada.
+
+## Retomada C235 — após integração da PR #55 e C234 (25/10/2026)
+
+Consultar este adendo antes da fotografia histórica acima. `main` local e
+`origin/main`: `98526e2ae96bc270c4b45c026354c342cabeb966` (PR #55 MERGED).
+Backend CI #40161734178: 508/508 PASS; regressão Termux C234: 508/508 PASS
+conforme evidência aprovada pelo Administrador Master. O bundle Git AGE C234
+foi recuperado e copiado ao Drive privado, SHA-256
+`336274e33068f1e9144903872592aea563ea576bf42e428357538c04f484eb15`.
+Banco único `frcaixinha_2_2_dev` preservado; nenhum novo SQL, migration ou
+restore SQL foi executado neste adendo.
+
+Fase 0 e bootstrap da Fase 1 concluídos; Fase 2 ainda em andamento; Fases
+3–7 não concluídas. F2-01 a F2-13 e IN-01 a IN-08 constam do adendo C235
+ao Documento Mestre e do painel da Issue #46. A F2P4 não foi aplicada,
+triggers IN-05 não foram instalados, concorrência física PostgreSQL segue
+NOT_RUN, e as decisões operacionais IN-06/IN-08 seguem pendentes. Nenhum
+cadastro/login, e-mail real, Pix ou função financeira está liberado.
+
+Próximo gate documental: revisar a PR C235 sem merge automático. A proposta
+C236 de automação dos metadados das PRs terá PR e auditoria separadas; não
+considerar a automação ativa antes de merge autorizado e prova em CI real.
