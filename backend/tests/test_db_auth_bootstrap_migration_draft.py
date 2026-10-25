@@ -61,20 +61,61 @@ class AuthBootstrapMigrationDraftTests(unittest.TestCase):
         self.assertNotIn("CASCADE", sql)
         self.assertNotIn("INSERT INTO", sql)
 
-    def test_downgrade_drops_only_new_objects_in_reverse_order(self):
-        sql = self.render(revision.downgrade)
-        self.assertEqual(sql.count("DROP TABLE "), 4)
-        self.assertEqual(sql.count("DROP INDEX "), 3)
-        positions = [sql.index(f"DROP TABLE {name}") for name in reversed(TABLES)]
-        self.assertEqual(positions, sorted(positions))
-        self.assertNotIn("CASCADE", sql)
-        self.assertNotIn("user_identities", sql)
-        self.assertNotIn("contracting_parties", sql)
+    def test_completed_historical_actor_constraint_precedes_registration(self):
+        sql = self.render(revision.upgrade)
+        self.assertIn(
+            "ALTER TABLE contracting_parties ADD COLUMN "
+            "initial_registration_identity_id UUID", sql,
+        )
+        self.assertIn(
+            "uq_contracting_parties_id_initial_registration_identity", sql,
+        )
+        self.assertIn(
+            "fk_contracting_parties_initial_registration_identity", sql,
+        )
+        self.assertIn("FOREIGN KEY(party_id, identity_id)", sql)
+        self.assertIn(
+            "REFERENCES contracting_parties "
+            "(id, initial_registration_identity_id)", sql,
+        )
+        self.assertIn("fk_registration_idempotency_initial_party_actor", sql)
+        self.assertLess(
+            sql.index("uq_contracting_parties_id_initial_registration_identity"),
+            sql.index("CREATE TABLE registration_idempotency"),
+        )
+
+    def test_downgrade_is_denied_before_any_alembic_operation(self):
+        with patch.object(revision, "op") as operations:
+            with self.assertRaisesRegex(
+                RuntimeError, "^F2P4_DOWNGRADE_NOT_AUTHORIZED$"
+            ):
+                revision.downgrade()
+        self.assertEqual(operations.method_calls, [])
+
+    def test_alembic_script_downgrade_is_denied_without_sql(self):
+        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        scripts = ScriptDirectory.from_config(config)
+        migration = scripts.get_revision("f2p4_20261022").module
+        self.assertEqual(migration.down_revision, "c16r5_20261020")
+        output = io.StringIO()
+        context = MigrationContext.configure(
+            dialect_name="postgresql",
+            opts={"as_sql": True, "output_buffer": output},
+        )
+        with patch.object(migration, "op", Operations(context)):
+            with self.assertRaisesRegex(
+                RuntimeError, "^F2P4_DOWNGRADE_NOT_AUTHORIZED$"
+            ):
+                migration.downgrade()
+        self.assertEqual(output.getvalue(), "")
 
     def test_draft_models_mirror_without_sql_connection(self):
         self.assertEqual(len(Base.metadata.tables), 21)
         self.assertEqual(set(TABLES) & set(Base.metadata.tables), set(TABLES))
         with patch("psycopg.connect") as connect:
             self.render(revision.upgrade)
-            self.render(revision.downgrade)
+            with self.assertRaisesRegex(
+                RuntimeError, "^F2P4_DOWNGRADE_NOT_AUTHORIZED$"
+            ):
+                self.render(revision.downgrade)
         connect.assert_not_called()

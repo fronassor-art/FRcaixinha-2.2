@@ -159,6 +159,18 @@ class G3C4In05In06OfflineTests(unittest.TestCase):
         self.assertEqual(first.identity.status, "PENDENTE")
         self.assertEqual(second.identity.status, "PENDENTE")
 
+    def test_in06_pf_and_pj_representative_share_global_cpf_lookup(self):
+        pf = self.pf()
+        pj = self.pj()
+        self.assertEqual(
+            pf.identity.cpf_lookup_hmac, pj.identity.cpf_lookup_hmac,
+        )
+        self.assertNotEqual(
+            pf.identity.cpf_ciphertext, pj.identity.cpf_ciphertext,
+        )
+        self.assertEqual(pj.identity.status, "PENDENTE")
+        self.assertEqual(pj.party.status, "PRELIMINAR")
+
     def test_in06_pending_duplicate_probe_rejects_before_proof_of_ownership(self):
         """A generic conflict check cannot prove claimant owns reserved CPF."""
         with self.assertRaisesRegex(
@@ -176,6 +188,41 @@ class G3C4In05In06OfflineTests(unittest.TestCase):
         ):
             self.pj(identity_id=302, party_id=402,
                     probe=_Probe(cnpj=True))
+
+    def test_in06_duplicate_pj_representative_email_is_not_ownership_proof(self):
+        with self.assertRaisesRegex(
+            RegistrationPreparationError, "^IDENTITY_CONFLICT$",
+        ):
+            self.pj(probe=_Probe(email=True))
+
+    def test_in06_uncertain_email_or_cnpj_probe_fails_without_disclosure(self):
+        for prepare, method in (
+            (self.pf, "email_exists"),
+            (self.pj, "email_exists"),
+            (self.pj, "cnpj_exists"),
+        ):
+            with self.subTest(flow=prepare.__name__, method=method):
+                probe = _Probe()
+                with patch.object(probe, method, return_value=1):
+                    with self.assertRaisesRegex(
+                        RegistrationPreparationError, "^CONFLICT_CHECK_FAILED$",
+                    ):
+                        prepare(probe=probe)
+                with patch.object(
+                    probe, method,
+                    side_effect=RuntimeError(
+                        "52998224725 12ABC34501DE35 PERSON@EXAMPLE.COM SECRET"
+                    ),
+                ):
+                    with self.assertRaises(RegistrationPreparationError) as caught:
+                        prepare(probe=probe)
+                self.assertEqual(str(caught.exception), "CONFLICT_CHECK_FAILED")
+                self.assertIsNone(caught.exception.__cause__)
+                for secret in (
+                    "52998224725", "12ABC34501DE35", "PERSON@EXAMPLE.COM",
+                    "SECRET",
+                ):
+                    self.assertNotIn(secret, repr(caught.exception))
 
     def test_in05_in06_no_implicit_pg_network_or_file_access(self):
         with patch("psycopg.connect") as db, patch("socket.socket") as net:

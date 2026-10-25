@@ -109,6 +109,10 @@ class ContractingParty(IdentityColumns, Base):
     __tablename__ = "contracting_parties"
 
     __table_args__ = (
+        UniqueConstraint(
+            "id", "initial_registration_identity_id",
+            name="uq_contracting_parties_id_initial_registration_identity",
+        ),
         CheckConstraint(
             "status IN ('PRELIMINAR', 'EM_ANALISE', 'APTO', 'SUSPENSO', 'ENCERRADO')",
             name="status_valid",
@@ -203,6 +207,17 @@ class ContractingParty(IdentityColumns, Base):
     representative_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user_identities.id"),
+    )
+    # Actor at initial registration, independent of the current PJ representative.
+    # F2P4 adds this nullable column to the existing C15 party table.
+    initial_registration_identity_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "user_identities.id",
+            name="fk_contracting_parties_initial_registration_identity",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
     )
     # Opaque references to protected records; never store document content here.
     representation_declaration_ref: Mapped[str | None] = mapped_column(
@@ -1375,7 +1390,7 @@ class EmailConfirmationChallenge(Base):
 
 
 class RegistrationIdempotency(Base):
-    """Reserva/replay offline, sem provar vinculo relacional identidade/parte."""
+    """Reserva/replay; COMPLETED referencia o ator historico da parte."""
 
     __tablename__ = "registration_idempotency"
 
@@ -1393,6 +1408,13 @@ class RegistrationIdempotency(Base):
             ["party_id"], ["contracting_parties.id"],
             name="fk_registration_idempotency_party_id_contracting_parties",
             ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["party_id", "identity_id"],
+            ["contracting_parties.id",
+             "contracting_parties.initial_registration_identity_id"],
+            name="fk_registration_idempotency_initial_party_actor",
+            ondelete="RESTRICT", onupdate="RESTRICT",
         ),
         CheckConstraint(
             "octet_length(origin_digest) = 32 AND "
