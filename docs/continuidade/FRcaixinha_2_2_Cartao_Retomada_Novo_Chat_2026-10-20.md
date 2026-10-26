@@ -325,3 +325,13 @@ foi integrada por squash, com `main` verificada em
   e SHA estável, com recuperação e cópia privada/readback comprovados.
   Preservar backup anterior da PR #60. Nenhum merge documental decorre
   automaticamente deste checkpoint.
+
+## Encerramento confirmado IN06-R1 — backup AGE e continuidade (26/10/2026)
+
+- IN06-R1 OFFLINE **ENCERRADA** (código PR #61 e docs PR #62 ambas integradas, `main@55f94cb85b40f4eddc279e1cc09f0b4ca76195a7`).
+- Provas: backend CI 520/520 PASS; Termux sync PASS; AGE **592274 bytes**, SHA-256 `fc68e434c056f565cdfbcd17a68430aadd90a62984cc4c0fea62023ec7fbd9ba`, restauração do bundle e quatro arquivos PASS conforme Master.
+- [Cópia Google Drive privada](https://drive.google.com/file/d/19gcTIu40uNI-fZLPfvcpb8ypZ-TAl3Kb/view?usp=drivesdk): upload, download e comparação SHA/`cmp` PASS; permissões somente proprietário.
+- [Checkpoint final oficial Issue #46](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6426437367). As fotografias históricas anteriores permanecem preservadas.
+- IN06 integral continua EM ANDAMENTO; IN08 NÃO INICIADA. Próxima proposta: escopo operacional IN06-R2, dependente de decisão jurídica e G2 própria; sem início automático da Fase 3.
+- Banco F2P4 já migrado e seus backups anteriores concluídos; não reabrir. PostgreSQL não acessado nesta atualização.
+- O backup AGE citado é da `main@55f94cb8...`; este novo adendo documental, após eventual integração, terá SHA posterior e **não faz parte** do AGE anterior. Preservar o AGE; controlar o gate de backup dessa revisão posterior separadamente.

@@ -152,3 +152,14 @@ Fase 2 em andamento, F2-01/F2-02 PARCIAIS, Fase 3 nao iniciada.
 Fonte: FRcaixinha_2_2_C16_R12_37_Restauracao_Estrutural_Pos_Migration.md.
 Proximo gate: integrar registro, atualizar Termux e retomar requisitos
 funcionais da Fase 2, sem repetir migrations ou restauracoes por reflexo.
+
+
+## Encerramento confirmado IN06-R1 — backup AGE e continuidade (26/10/2026)
+
+Registro operacional de continuidade, posterior aos históricos C16: código IN06-R1 OFFLINE pela PR #61 e checkpoint documental pela PR #62, ambos integrados em `main@55f94cb85b40f4eddc279e1cc09f0b4ca76195a7`. CI 520/520 PASS da PR #61, Termux sincronizado, árvore íntegra.
+Backup final AGE Git+código+documentos do SHA 55f94cb8: `FRcaixinha_2_2_IN06_R1_55f94cb8_20261026_git_docs.tar.gz.age`, 592274 bytes, SHA-256 `fc68e434c056f565cdfbcd17a68430aadd90a62984cc4c0fea62023ec7fbd9ba`; recuperação no Termux PASS conforme relatório Master e cópia Drive privada com download/`cmp` real PASS.
+Prova oficial: https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6426437367
+Drive privado: https://drive.google.com/file/d/19gcTIu40uNI-fZLPfvcpb8ypZ-TAl3Kb/view?usp=drivesdk
+IN06-R1 encerrada no escopo OFFLINE; IN06 integral e Fase 2 em andamento; IN08 não iniciada. Próximo escopo potencial IN06-R2 sujeito à G2 separada e definição jurídica.
+F2P4 e respectivos backups históricos concluídos, não repetir. Nenhum acesso PostgreSQL nesta atualização.
+Este adendo posterior à cópia AGE não está incluído na fotografia Git `55f94cb8`; futuras integrações documentais devem controlar SHA e backup correspondente sem substituir a cópia anterior.

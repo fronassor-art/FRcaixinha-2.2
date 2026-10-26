@@ -283,3 +283,18 @@ Fonte detalhada, evidencias, ADR/ERR e limites:
 [checkpoint C16-R12.37](FRcaixinha_2_2_C16_R12_37_Restauracao_Estrutural_Pos_Migration.md).
 Proximo gate: integrar documento, sincronizar Termux e retomar requisitos
 funcionais da Fase 2 sem repetir restauracao ou migration.
+
+
+## Encerramento confirmado IN06-R1 — backup AGE e continuidade (26/10/2026)
+
+- [x] PR #61 integrada: implementação + testes IN06-R1 offline; Backend CI 520/520 PASS.
+- [x] PR #62 integrada: Documento Mestre e Cartão de Retomada atualizados; `main@55f94cb85b40f4eddc279e1cc09f0b4ca76195a7`.
+- [x] Termux sincronizado por fast-forward PASS, Git íntegro PASS.
+- [x] Backup AGE Git/código/docs do SHA acima: 592274 bytes; SHA256 `fc68e434c056f565cdfbcd17a68430aadd90a62984cc4c0fea62023ec7fbd9ba`; restauração e quatro arquivos PASS conforme logs Master.
+- [x] [Drive privado, download real e `cmp` PASS](https://drive.google.com/file/d/19gcTIu40uNI-fZLPfvcpb8ypZ-TAl3Kb/view?usp=drivesdk).
+- [x] [Checkpoint encerramento na Issue #46](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6426437367), [PR #62](https://github.com/fronassor-art/FRcaixinha-2.2/pull/62#issuecomment-6426439152).
+- [ ] IN06 operacional (prova titularidade PF/PJ, representação PJ, revisor, disputa/recuperação, jurídico) — exige escopo e G2 própria.
+- [ ] IN08 operacional — não iniciada.
+- [ ] Fase 2 integral — permanece em andamento; não declarar Fase 3 liberada.
+- [ ] Gate de recuperação do novo SHA **caso** este adendo administrativo seja integrado: AGE anterior permanece válido para `55f94cb8` e não contém alterações posteriores.
+Histórico C15/C16/F2P4 já concluído preservado; não reabrir migrations ou backup PostgreSQL por este registro.

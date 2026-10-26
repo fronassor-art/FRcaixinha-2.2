@@ -760,3 +760,23 @@ atualização documental.
 - **Backup final:** AGE da IN06-R1 após documentação versionada e SHA estável
   permanece `PENDENTE/NOT_RUN`; recuperação, cópia privada e readback ainda
   precisam de prova. O backup anterior da PR #60 permanece preservado.
+
+## Encerramento confirmado IN06-R1 — backup AGE e continuidade (26/10/2026)
+
+**Este registro é posterior aos checkpoints anteriores e não os reescreve.**
+Escopo: IN06-R1 preparação e validação de intenção de contestação PF/PJ **somente offline**.
+PR #61: código/testes MERGED. PR #62: documentação MERGED.
+Baseline de código e documentação finalizado: `main@55f94cb85b40f4eddc279e1cc09f0b4ca76195a7`.
+Backend CI na PR #61: 520/520 PASS, `pip check` PASS; verificação offline do Codex PASS.
+Termux pós-PR #62: `IN06_R1_DOC_SYNC=PASS`, código de saída `0`, `git fsck --full --strict=PASS` relatado no preflight de backup.
+Backup AGE único Git/código/documentos do SHA mencionado: `FRcaixinha_2_2_IN06_R1_55f94cb8_20261026_git_docs.tar.gz.age`.
+Tamanho: **592274 bytes**; SHA-256: `fc68e434c056f565cdfbcd17a68430aadd90a62984cc4c0fea62023ec7fbd9ba`.
+Recuperação/descriptografia e conferência de quatro arquivos essenciais **PASS segundo logs do Termux**; o assistente não executou essa descriptografia.
+Offsite no Google Drive privado, pasta `FRcaixinha_2.2_Backups`; arquivo ID `19gcTIu40uNI-fZLPfvcpb8ypZ-TAl3Kb`: upload PASS, `shared=false`, somente proprietário, download efetivo e conferência independente SHA-256/`cmp` PASS.
+Provas: [Issue #46 — encerramento](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6426437367); [PR #62 — encerramento](https://github.com/fronassor-art/FRcaixinha-2.2/pull/62#issuecomment-6426439152); [backup externo](https://drive.google.com/file/d/19gcTIu40uNI-fZLPfvcpb8ypZ-TAl3Kb/view?usp=drivesdk).
+**IN06_R1_ENCERRAMENTO_INTEGRAL=PASS**, restrito ao pacote offline, documentação e recuperação acima.
+**IN06_COMPLETA=EM_ANDAMENTO; IN08=NAO_INICIADA; FASE_2=EM_ANDAMENTO.**
+Não foram aprovadas/provadas verificação de titularidade PF/PJ, representação jurídica PJ, arbitragem humana, recuperação operacional nem liberação de acesso, Pix ou finanças por este pacote.
+F2P4 e seus backups/migration já finalizados historicamente, **não reabrir**; banco `frcaixinha_2_2_dev` não foi acessado nesta conclusão.
+**Próxima etapa candidata:** planejar os requisitos operacionais IN06-R2 (provas e autoridade/contestações), com avaliação jurídica e **G2 própria**; não iniciar Fase 3 automaticamente.
+**Nota de recuperação:** o AGE comprovado cobre exatamente `55f94cb8...`. Este adendo de encerramento é posterior ao arquivo AGE e, quando integrado, criará SHA documental mais recente que **não deve ser apresentado como incluído naquele AGE**. Preservar o backup válido e registrar o gate de eventual backup complementar desse novo estado sem inventar execução.
