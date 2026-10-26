@@ -717,3 +717,19 @@ OPEN/DRAFT até revisão independente do SHA novo; merge, Termux e backup
 pós-merge exigem nova G2. C236 R14, quatro untracked R22 e o writer
 desabilitado permanecem preservados; nenhuma migração/DDL/DML ou modificação
 do banco é autorizada por este adendo.
+
+
+## Checkpoint C236 — PR #60 integrada e validada (26/10/2026)
+
+Esta seção é um **checkpoint posterior**; os registros anteriores sobre PR #56 em Draft e R22 não rastreados são históricos e permanecem preservados, mas **não descrevem o estado vigente**.
+
+- **Repositório/raiz:** `fronassor-art/FRcaixinha-2.2`; checkout único `~/FRcaixinha_2.2`.
+- **PR #60 (C236 / B-R22):** `CLOSED/MERGED` por squash após G2 específica; commit do merge `8e10f5068e8572b0eb7cc61fa43f63873b1d1c85`, integrado à `main` em 26/10/2026. A PR #59 também já estava integrada no baseline anterior `87584dbab83c1af0ab541544906cef64a5d34e22`.
+- **Escopo:** exatamente quatro arquivos R22 agora rastreados: `.github/scripts/c236_governance_gate.py`, `.github/scripts/test_c236_governance_gate.py`, `.github/workflows/c236-governance-gate-pilot.yml`, `.github/workflows/c236-governance-gate-tests.yml`.
+- **B2:** associação de CI à PR, HEAD e base viva `main` exigida com falha fechada; duas leituras de evidência e cenários adversariais preservados.
+- **Provas:** CI GitHub [#40349303911](https://github.com/fronassor-art/FRcaixinha-2.2/actions/runs/40349303911) `26/26 PASS`; Codex Termux relatou `main=origin/main=HEAD` no SHA do squash, índice/árvore limpos, `git fsck --full --strict=PASS` e testes pós-merge `26/26 PASS`. Essa prova Termux é relatório do executor, não acesso direto de ChatGPT ao dispositivo.
+- **Operação e banco:** workflow piloto apenas `workflow_dispatch`, único job com `if: ${{ false }}`; writer `PR metadata sync=disabled_manually` conforme consulta Termux. B3/B4, branch protection, required checks e ativação privilegiada continuam **sem autorização**. PostgreSQL 18.2 `frcaixinha_2_2_dev` **não acessado nesta tarefa**; sem migration, SQL, Pix ou operação financeira.
+- **Recuperação:** política aprovada de **um único backup final AGE Git+R22**, após reconciliação documental e validação da `main`; **não realizado na data deste checkpoint documental**. Identificação, SHA-256, restauração, Drive privado/readback e encerramento integral serão registrados no topo da [Issue #46](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46) e na PR #60 **somente após comprovação real**.
+- **Fases:** Fase 2 continua em andamento; esta PR não conclui critérios físicos PostgreSQL, IN-05, IN-06/IN-08 ou Fases 3–7. Contrato Técnico Mestre e regras financeiras inalterados.
+
+**Natureza:** adendo factual de continuidade da própria C236, não uma regra nova ou autorização operacional.
