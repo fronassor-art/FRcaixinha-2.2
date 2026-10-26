@@ -8,6 +8,7 @@ import pr_status_sync as sync
 
 HEAD = "a" * 40
 BASE_SHA = "b" * 40
+NEW_MAIN_SHA = "c" * 40
 
 
 def make_pr():
@@ -54,8 +55,33 @@ class FakeAPI:
         self.run_reads = 0
         self.on_second_run_read = None
         self.on_third_run_read = None
+        self.main_sha = BASE_SHA
+        self.main_reads = 0
+        self.on_second_main_read = None
+        self.on_third_main_read = None
+        self.main_ref_payload = None
+        self.main_ref_error = None
 
     def get(self, path):
+        if path == sync.MAIN_REF_PATH:
+            self.main_reads += 1
+            if self.main_reads == 2 and self.on_second_main_read:
+                self.on_second_main_read(self)
+            if self.main_reads == 3 and self.on_third_main_read:
+                self.on_third_main_read(self)
+            if self.main_ref_error:
+                raise self.main_ref_error
+            if self.main_ref_payload is not None:
+                return copy.deepcopy(self.main_ref_payload)
+            return {
+                "ref": "refs/heads/main",
+                "url": f"https://api.github.com{sync.BASE}/git/refs/heads/main",
+                "object": {
+                    "type": "commit",
+                    "sha": self.main_sha,
+                    "url": f"https://api.github.com{sync.BASE}/git/commits/{self.main_sha}",
+                },
+            }
         if path == f"{sync.BASE}/pulls/7":
             self.pr_reads += 1
             if self.pr_reads == 2 and self.on_second_read:
@@ -99,6 +125,151 @@ def run_event():
 
 
 class MetadataTests(unittest.TestCase):
+    def test_live_main_advanced_while_pr_and_successful_ci_remain_on_old_base(self):
+        api = FakeAPI()
+        api.main_sha = NEW_MAIN_SHA
+        sync.synchronize(api, "workflow_run", run_event())
+        self.assertIn("**Status:** BLOCKED", api.pr["body"])
+        self.assertNotIn("**Status:** PASS", api.pr["body"])
+        self.assertIn(f"**Base main observada:** `{NEW_MAIN_SHA}`", api.pr["body"])
+        self.assertNotIn(f"**Base main observada:** `{BASE_SHA}`", api.pr["body"])
+        self.assertEqual(api.main_reads, 3)
+
+    def test_live_main_and_ci_agree_allows_pass(self):
+        api = FakeAPI()
+        self.assertEqual(sync.synchronize(api, "workflow_run", run_event()), "UPDATED")
+        self.assertIn("**Status:** PASS", api.pr["body"])
+        self.assertIn(f"**Base main observada:** `{BASE_SHA}`", api.pr["body"])
+        self.assertEqual(api.main_reads, 3)
+
+    def test_previous_pass_is_replaced_when_main_advances(self):
+        api = FakeAPI()
+        historical = api.pr["body"]
+        self.assertEqual(sync.synchronize(api, "workflow_run", run_event()), "UPDATED")
+        self.assertIn("**Status:** PASS", api.pr["body"])
+        api.main_sha = NEW_MAIN_SHA
+        self.assertEqual(sync.synchronize(api, "workflow_run", run_event()), "UPDATED")
+        self.assertIn("**Status:** BLOCKED", api.pr["body"])
+        self.assertNotIn("**Status:** PASS", api.pr["body"])
+        self.assertIn(f"**Base main observada:** `{NEW_MAIN_SHA}`", api.pr["body"])
+        self.assertEqual(api.pr["body"].count(sync.START), 1)
+        self.assertEqual(api.pr["body"].count(sync.END), 1)
+        self.assertTrue(api.pr["body"].endswith(historical))
+
+    def test_current_main_requires_ci_association_to_same_base(self):
+        api = FakeAPI()
+        api.pr["base"]["sha"] = NEW_MAIN_SHA
+        api.main_sha = NEW_MAIN_SHA
+        sync.synchronize(api, "workflow_run", run_event())
+        self.assertIn("**Status:** BLOCKED", api.pr["body"])
+        self.assertNotIn("**Status:** PASS", api.pr["body"])
+
+    def test_current_main_and_new_ci_association_allow_pass(self):
+        api = FakeAPI()
+        api.pr["base"]["sha"] = NEW_MAIN_SHA
+        api.main_sha = NEW_MAIN_SHA
+        api.runs[0]["pull_requests"][0]["base"]["sha"] = NEW_MAIN_SHA
+        sync.synchronize(api, "workflow_run", run_event())
+        self.assertIn("**Status:** PASS", api.pr["body"])
+        self.assertIn(f"**Base main observada:** `{NEW_MAIN_SHA}`", api.pr["body"])
+
+    def test_invalid_main_reference_fails_closed(self):
+        valid = FakeAPI().get(sync.MAIN_REF_PATH)
+        malformed = (
+            {},
+            {"ref": "refs/heads/main", "object": {"type": "commit", "sha": BASE_SHA}},
+            {**valid, "ref": "refs/heads/other"},
+            {**valid, "url": "https://api.github.com/repos/other/project/git/refs/heads/main"},
+            {**valid, "object": {**valid["object"], "type": "tag"}},
+            {**valid, "object": {**valid["object"], "sha": "short"}},
+            {**valid, "object": {**valid["object"], "url": "https://api.github.com/other"}},
+        )
+        for payload in malformed:
+            with self.subTest(payload=payload):
+                api = FakeAPI()
+                api.main_ref_payload = payload
+                with self.assertRaisesRegex(sync.SyncError, "^MAIN_REF_INVALID$"):
+                    sync.synchronize(api, "workflow_run", run_event())
+                self.assertEqual(api.patches, [])
+
+    def test_unavailable_main_reference_fails_closed(self):
+        api = FakeAPI()
+        api.main_ref_error = sync.SyncError("API_FAILED")
+        with self.assertRaisesRegex(sync.SyncError, "^API_FAILED$"):
+            sync.synchronize(api, "workflow_run", run_event())
+        self.assertEqual(api.patches, [])
+
+    def test_main_changes_before_patch_is_denied(self):
+        api = FakeAPI()
+        api.on_second_main_read = lambda instance: setattr(instance, "main_sha", NEW_MAIN_SHA)
+        with self.assertRaisesRegex(sync.SyncError, "^CONCURRENT_MAIN$"):
+            sync.synchronize(api, "workflow_run", run_event())
+        self.assertEqual(api.patches, [])
+        self.assertEqual(api.main_reads, 2)
+
+    def test_main_changes_after_patch_is_detected(self):
+        api = FakeAPI()
+        api.on_third_main_read = lambda instance: setattr(instance, "main_sha", NEW_MAIN_SHA)
+        with self.assertRaisesRegex(sync.SyncError, "^POST_WRITE_CONFLICT$"):
+            sync.synchronize(api, "workflow_run", run_event())
+        self.assertEqual(len(api.patches), 1)
+        self.assertEqual(api.main_reads, 3)
+        # Read back the body via the API: detection did not undo the PATCH.
+        persisted = api.get(f"{sync.BASE}/pulls/7")["body"]
+        self.assertIn("**Status:** PASS", persisted)
+        self.assertEqual(api.main_sha, NEW_MAIN_SHA)
+
+    def test_post_patch_main_conflict_does_not_overwrite_human_edit(self):
+        api = FakeAPI()
+        api.on_patch = lambda pr: pr.update(body=pr["body"] + " edição humana")
+        api.on_third_main_read = lambda instance: setattr(instance, "main_sha", NEW_MAIN_SHA)
+        with self.assertRaisesRegex(sync.SyncError, "^POST_WRITE_CONFLICT$"):
+            sync.synchronize(api, "workflow_run", run_event())
+        self.assertEqual(len(api.patches), 1)
+        persisted = api.get(f"{sync.BASE}/pulls/7")["body"]
+        self.assertTrue(persisted.endswith(" edição humana"))
+
+    def test_failed_ci_without_current_base_provenance_is_blocked(self):
+        api = FakeAPI(runs=[make_run(conclusion="failure")])
+        api.runs[0]["pull_requests"][0]["base"]["sha"] = NEW_MAIN_SHA
+        sync.synchronize(api, "workflow_run", run_event())
+        self.assertIn("**Status:** BLOCKED", api.pr["body"])
+        self.assertNotIn("**Status:** FAIL", api.pr["body"])
+
+    def test_failed_ci_with_current_base_provenance_is_fail(self):
+        api = FakeAPI(runs=[make_run(conclusion="failure")])
+        sync.synchronize(api, "workflow_run", run_event())
+        self.assertIn("**Status:** FAIL", api.pr["body"])
+
+    def test_completed_old_base_failure_is_blocked_even_with_another_ci_pending(self):
+        old_failure = make_run(conclusion="failure")
+        old_failure["pull_requests"][0]["base"]["sha"] = NEW_MAIN_SHA
+        pending = make_run(name="Flutter CI", conclusion=None)
+        required = ("Backend CI", "Flutter CI")
+        runs = {"Backend CI": old_failure, "Flutter CI": pending}
+        status, _ = sync.classification(required, runs, make_pr(), main_sha=BASE_SHA)
+        self.assertEqual(status, "BLOCKED")
+        old_failure["pull_requests"][0]["base"]["sha"] = BASE_SHA
+        status, _ = sync.classification(required, runs, make_pr(), main_sha=BASE_SHA)
+        self.assertEqual(status, "PENDING")
+
+    def test_document_only_pr_uses_live_main_and_preserves_history(self):
+        api = FakeAPI(files=["docs/only.md"])
+        old_body = api.pr["body"]
+        api.main_sha = NEW_MAIN_SHA
+        sync.synchronize(api, "workflow_run", run_event())
+        self.assertIn("**Status:** BLOCKED", api.pr["body"])
+        self.assertIn(f"**Base main observada:** `{NEW_MAIN_SHA}`", api.pr["body"])
+        self.assertTrue(api.pr["body"].endswith(old_body))
+
+    def test_stale_main_keeps_pending_and_failure_from_becoming_pass(self):
+        for conclusion in ("failure", None, "cancelled"):
+            with self.subTest(conclusion=conclusion):
+                api = FakeAPI(runs=[make_run(conclusion=conclusion)])
+                api.main_sha = NEW_MAIN_SHA
+                sync.synchronize(api, "workflow_run", run_event())
+                self.assertNotIn("**Status:** PASS", api.pr["body"])
+
     def test_old_base_ci_cannot_produce_pass_after_main_advances(self):
         api = FakeAPI()
         api.pr["base"]["sha"] = "c" * 40
