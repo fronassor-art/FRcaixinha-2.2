@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 REPO = "fronassor-art/FRcaixinha-2.2"
 BASE = f"/repos/{REPO}"
+MAIN_REF_PATH = f"{BASE}/git/ref/heads/main"
 START = "<!-- FR22_PR_CI:INICIO -->"
 END = "<!-- FR22_PR_CI:FIM -->"
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -75,6 +76,27 @@ class GitHubAPI:
 
 def valid_sha(value) -> bool:
     return isinstance(value, str) and SHA.fullmatch(value) is not None
+
+
+def current_main_sha(api) -> str:
+    """Read and validate the live main ref independently of PR metadata."""
+    try:
+        ref = api.get(MAIN_REF_PATH)
+    except SyncError:
+        raise
+    except Exception:
+        raise SyncError("MAIN_REF_UNAVAILABLE") from None
+    obj = ref.get("object") if isinstance(ref, dict) else None
+    if (
+        not isinstance(obj, dict)
+        or ref.get("ref") != "refs/heads/main"
+        or ref.get("url") != f"https://api.github.com{BASE}/git/refs/heads/main"
+        or obj.get("type") != "commit"
+        or not valid_sha(obj.get("sha"))
+        or obj.get("url") != f"https://api.github.com{BASE}/git/commits/{obj.get('sha')}"
+    ):
+        raise SyncError("MAIN_REF_INVALID")
+    return obj["sha"]
 
 
 def valid_pr(pr: dict) -> bool:
@@ -231,7 +253,7 @@ def run_signature(runs: dict[str, dict]) -> tuple:
     ))
 
 
-def run_proves_base(run: dict, pr: dict) -> bool:
+def run_proves_base(run: dict, pr: dict, main_sha: str) -> bool:
     """Require GitHub's PR association to bind this run to current head and base."""
     return any(
         isinstance(entry, dict)
@@ -239,7 +261,7 @@ def run_proves_base(run: dict, pr: dict) -> bool:
         and isinstance(entry.get("head"), dict)
         and isinstance(entry.get("base"), dict)
         and entry["head"].get("sha") == pr["head"]["sha"]
-        and entry["base"].get("sha") == pr["base"]["sha"]
+        and entry["base"].get("sha") == main_sha
         for entry in run.get("pull_requests") or []
     )
 
@@ -253,13 +275,24 @@ def needs_human_review(files: list[str]) -> bool:
 
 
 def classification(required: tuple[str, ...], runs: dict[str, dict],
-                   pr: dict | None = None, human_review: bool = False) -> tuple[str, str]:
+                   pr: dict | None = None, human_review: bool = False,
+                   main_sha: str | None = None) -> tuple[str, str]:
     if not required:
         return "BLOCKED", "Nenhuma CI aplicável ao escopo desta PR."
+    if pr is None:
+        if any(name not in runs or runs[name].get("status") != "completed" for name in required):
+            return "PENDING", "Aguardando a conclusão das CIs aplicáveis ao HEAD atual."
+        return "BLOCKED", "A base main vigente não foi comprovada."
+    if not valid_sha(main_sha) or pr["base"].get("sha") != main_sha:
+        return "BLOCKED", "A base da PR não corresponde à referência main vigente."
+    if any(
+        name in runs and runs[name].get("status") == "completed"
+        and not run_proves_base(runs[name], pr, main_sha)
+        for name in required
+    ):
+        return "BLOCKED", "A CI não comprovou correspondência com a base main atual."
     if any(name not in runs or runs[name].get("status") != "completed" for name in required):
         return "PENDING", "Aguardando a conclusão das CIs aplicáveis ao HEAD atual."
-    if pr is None or any(not run_proves_base(runs[name], pr) for name in required):
-        return "BLOCKED", "A CI não comprovou correspondência com a base main atual."
     conclusions = [runs[name].get("conclusion") for name in required]
     if any(value in ("failure", "timed_out", "action_required") for value in conclusions):
         return "FAIL", "Uma CI aplicável falhou."
@@ -283,11 +316,10 @@ def upsert(body: str, block: str) -> str:
 
 
 def render(pr: dict, required: tuple[str, ...], runs: dict[str, dict],
-           timestamp: str, human_review: bool = False) -> str:
-    status, reason = classification(required, runs, pr, human_review)
+           timestamp: str, main_sha: str, human_review: bool = False) -> str:
+    status, reason = classification(required, runs, pr, human_review, main_sha)
     sha = pr["head"]["sha"]
-    base_sha = pr["base"].get("sha")
-    if not valid_sha(base_sha):
+    if not valid_sha(pr["base"].get("sha")):
         raise SyncError("BASE_SHA_INVALID")
     evidence = []
     for name in required:
@@ -312,7 +344,7 @@ def render(pr: dict, required: tuple[str, ...], runs: dict[str, dict],
         "",
         f"**Status:** {status}. {reason}",
         f"**HEAD verificado:** `{sha}`.",
-        f"**Base main observada:** `{base_sha}`.",
+        f"**Base main observada:** `{main_sha}`.",
         f"**Confirmação da evidência:** {timestamp}.",
         "**Testes:** CONTAGEM NÃO VERIFICADA; o status do workflow não prova sozinho o total de testes.",
         "**Correspondência:** PASS exige associação explícita da CI ao HEAD e à base main atuais; ausência de prova resulta em BLOCKED.",
@@ -344,6 +376,7 @@ def _synchronize_pr(api, pr: dict, fallback_time: str) -> str:
     """Best-effort guarded update; REST PATCH lacks strong compare-and-swap."""
     if not valid_pr(pr):
         raise SyncError("PR_CLOSED_OR_UNTRUSTED")
+    main_sha = current_main_sha(api)
     number = pr_number(pr.get("number"))
     files = changed_files(api, number)
     required = required_workflows(files)
@@ -352,8 +385,10 @@ def _synchronize_pr(api, pr: dict, fallback_time: str) -> str:
     timestamp = max(times) if times else fallback_time
     old_body = pr.get("body") or ""
     new_body = upsert(old_body, render(pr, required, runs, timestamp,
-                                       needs_human_review(files)))
+                                       main_sha, needs_human_review(files)))
     if new_body == old_body:
+        if current_main_sha(api) != main_sha:
+            raise SyncError("CONCURRENT_MAIN")
         return "UNCHANGED"
     # REST PATCH has no strong compare-and-swap; re-read immediately before write.
     if run_signature(latest_runs(api, pr["head"]["sha"], required)) != run_signature(runs):
@@ -367,7 +402,13 @@ def _synchronize_pr(api, pr: dict, fallback_time: str) -> str:
         or (current.get("body") or "") != old_body
     ):
         raise SyncError("CONCURRENT_CHANGE")
+    if current_main_sha(api) != main_sha:
+        raise SyncError("CONCURRENT_MAIN")
     api.patch(f"{BASE}/pulls/{number}", {"body": new_body})
+    if current_main_sha(api) != main_sha:
+        # The PATCH may have persisted an obsolete PASS. Without a conditional
+        # body update, an automatic repair could overwrite a concurrent human edit.
+        raise SyncError("POST_WRITE_CONFLICT")
     after = get_pr(api, number)
     if (
         not valid_pr(after)
