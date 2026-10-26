@@ -229,3 +229,61 @@ PostgreSQL autoritativo `frcaixinha_2_2_dev`, 18.2, revisão
 de aplicação não comprovada. Fase 2 em andamento; rotação, persistência,
 integração API, autorização operacional e fluxos financeiros permanecem
 pendentes. Fase 3 não iniciada.
+
+## Retomada C235 — após integração da PR #55 e C234 (25/10/2026)
+
+Consultar este adendo antes da fotografia histórica acima. `main` local e
+`origin/main`: `98526e2ae96bc270c4b45c026354c342cabeb966` (PR #55 MERGED).
+Backend CI #40161734178: 508/508 PASS; regressão Termux C234: 508/508 PASS
+conforme evidência aprovada pelo Administrador Master. O bundle Git AGE C234
+foi recuperado e copiado ao Drive privado, SHA-256
+`336274e33068f1e9144903872592aea563ea576bf42e428357538c04f484eb15`.
+Banco único `frcaixinha_2_2_dev` preservado; nenhum novo SQL, migration ou
+restore SQL foi executado neste adendo.
+
+Fase 0 e bootstrap da Fase 1 concluídos; Fase 2 ainda em andamento; Fases
+3–7 não concluídas. F2-01 a F2-13 e IN-01 a IN-08 constam do adendo C235
+ao Documento Mestre e do painel da Issue #46. A F2P4 não foi aplicada,
+triggers IN-05 não foram instalados, concorrência física PostgreSQL segue
+NOT_RUN, e as decisões operacionais IN-06/IN-08 seguem pendentes. Nenhum
+cadastro/login, e-mail real, Pix ou função financeira está liberado.
+
+Próximo gate documental: revisar a PR C235 sem merge automático. A proposta
+C236 de automação dos metadados das PRs terá PR e auditoria separadas; não
+considerar a automação ativa antes de merge autorizado e prova em CI real.
+
+## Errata de continuidade C235-R1 — F2P4 e checkpoints posteriores (26/10/2026)
+
+**Correção factual obrigatória do C235 (25/10/2026):** a frase acima
+“A F2P4 não foi aplicada” estava **ERRADA JÁ EM 25/10**, não apenas
+desatualizada posteriormente. O Administrador Master havia autorizado e
+executado a migration `c16r5_20261020 → f2p4_20261022` em **24/10/2026**
+no único PostgreSQL autoritativo `frcaixinha_2_2_dev` (PG 18.2).
+A [prova C16-R12.203R5](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6388195740)
+registrou `ALEMBIC=f2p4_20261022`, **22 tabelas** e `POSTCHECK=PASS`;
+verificações READ ONLY posteriores reconfirmaram o estado. O texto C235
+original permanece intacto para rastreabilidade, **mas não deve ser tomado
+como verdade factual sobre o banco naquela data**.
+
+O registro C235 de que **o próprio adendo não executou SQL/migration** está
+correto; isso é diferente de dizer que a migration ainda não havia ocorrido.
+O `downgrade()` da F2P4 integrado à `main` bloqueia execução destrutiva com
+`F2P4_DOWNGRADE_NOT_AUTHORIZED`; não é autorização de reversão.
+
+**Evolução posterior ao C235:** a [PR #48](https://github.com/fronassor-art/FRcaixinha-2.2/pull/48)
+e a [PR #54](https://github.com/fronassor-art/FRcaixinha-2.2/pull/54)
+foram integradas exclusivamente no escopo documental em 26/10, auditadas,
+sincronizadas no Termux e acompanhadas de backups Git+R22 AGE recuperáveis,
+com cópia privada e conferência remota. Última `main` GitHub/Termux
+comprovada: `8169007970c92c69badb175a0c276f0c3485ef81`.
+O backup PostgreSQL C205 pós-F2P4 permanece preservado, com leitura
+AGE/TOC e SHA remoto confirmados; **restauração funcional do C205 = NOT_RUN**.
+Backups de revisões anteriores não comprovam recuperação do C205.
+
+**Limites ainda vigentes:** PR #56 permanece documental e Draft até revisão
+independente e autorização de merge separada. IN-05 triggers **não instalados**;
+testes físicos de concorrência, locks, idempotência e revogação no PostgreSQL
+**NOT_RUN/BLOCKED**; políticas operacionais/jurídicas IN-06/IN-08 pendentes.
+Cadastro/login, e-mail real, Pix e finanças não liberados. C236 R14 e quatro
+arquivos R22 preservados, writer de metadados desabilitado; nenhum avanço de
+fase, instalação ou mudança de banco decorre desta errata.

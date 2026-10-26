@@ -613,3 +613,107 @@ Fonte detalhada, evidencias, ADR/ERR e limites:
 [checkpoint C16-R12.37](FRcaixinha_2_2_C16_R12_37_Restauracao_Estrutural_Pos_Migration.md).
 Proximo gate: integrar documento, sincronizar Termux e retomar requisitos
 funcionais da Fase 2 sem repetir restauracao ou migration.
+
+## Adendo de continuidade C235 — estado após C234 (25/10/2026)
+
+Este adendo atualiza a fotografia do projeto, sem alterar o Contrato Técnico
+Mestre, os ADR/ERR aprovados ou os checkpoints históricos acima. A PR #55 foi
+integrada por merge commit na `main` `98526e2ae96bc270c4b45c026354c342cabeb966`
+(pais `751da8f8f380fc45d58de68cf707a3c2f9149777` e
+`61041beb31d0cebbb24d682bea0ee84e1c20a49b`). C225 corrigiu o manifesto
+offline F2P4; C226 auditou a correção; C227–C233 prepararam, versionaram,
+publicaram, auditaram e integraram o pacote. C234 sincronizou a `main` no
+Termux. Backend CI #40161734178 e regressão oficial Termux C234: 508/508
+PASS; a execução Termux foi informada e aprovada pelo Administrador Master,
+não repetida neste adendo.
+
+Backup Git AGE C234 `FRcaixinha_2_2_C234_GIT_98526e2ae96b_20261025_021703.bundle.age`:
+SHA-256 `336274e33068f1e9144903872592aea563ea576bf42e428357538c04f484eb15`,
+recuperação independente e cópia privada Google Drive confirmadas no checkpoint.
+O hash local foi reconferido em C235. Backup Git não substitui backup
+PostgreSQL; nenhum novo dump ou restore SQL decorre da integração. O único
+banco autoritativo permanece `frcaixinha_2_2_dev`, PostgreSQL 18.2. A última
+revisão estrutural comprovada antes deste adendo era `c16r5_20261020`; a
+F2P4 não foi aplicada, e seu downgrade executável está bloqueado.
+
+**Fases:** Fase 0 concluída; Fase 1 bootstrap concluída; Fase 2 em andamento;
+Fases 3–7 não concluídas. O conjunto F2-01 a F2-13 mantém a classificação
+do painel da [Issue #46](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46):
+F2-01 identidade do banco PASS; F2-02 migrations PARCIAL; F2-03 entidades
+PARCIAL; F2-04 FKs/índices/isolamento PARCIAL; F2-05 cadastro PF PASS OFFLINE;
+F2-06 cadastro PJ PASS OFFLINE; F2-07 credenciais/sessões PASS OFFLINE;
+F2-08 convites PARCIAL; F2-09 admissão operacional NÃO COMPROVADA; F2-10
+autorização tenant/Master PARCIAL/PASS OFFLINE; F2-11 consentimento PARCIAL;
+F2-12 ciclos PARCIAL; F2-13 LGPD/logs/segredos PARCIAL. Nenhum PASS OFFLINE
+equivale à ativação de endpoint ou à prova transacional PostgreSQL.
+
+**IN-01 a IN-08:** os módulos e testes preparatórios da PR #55 estão na
+`main`, mas a prova física de duas conexões, locks, SAVEPOINT e rollback
+permanece NOT_RUN. IN-05 tem triggers apenas propostos, não instalados.
+IN-06 ainda requer decisões operacionais/jurídicas de titularidade,
+representação, contestação e recuperação; IN-08 requer política de retenção
+e expurgo aprovada. Não liberar CPF/CNPJ/e-mail por mera expiração. Cadastro,
+login, e-mail real, Pix e operações financeiras continuam desabilitados.
+
+**Procedimento:** ChatGPT orienta com base normativa; Codex no Termux
+inspeciona, implementa e verifica apenas sob G2; o proprietário executa atos
+interativos em Termux/Debian PRoot independente quando o Codex não dispõe do
+executor; GitHub CI é evidência separada. Preservar uma raiz, um repositório,
+um banco e os backups recuperáveis. A sincronização automática de metadados
+de PR é proposta C236 em avaliação: uma PR de workflow não a torna ativa;
+auditoria, autorização de merge e prova real pós-merge serão gates próprios.
+
+## Errata documental C235-R1 — F2P4 e reconciliação cronológica (26/10/2026)
+
+**REGISTRO DE ERRO (não apenas atualização de data).** No adendo C235 de
+25/10/2026, a afirmação “a última revisão estrutural comprovada antes deste
+adendo era `c16r5_20261020`; a F2P4 não foi aplicada” é **factualmente
+incorreta na própria data de 25/10**. A migration já tinha sido aplicada em
+**24/10/2026**, com G2 específica, diretamente no banco único
+`frcaixinha_2_2_dev` PostgreSQL 18.2. A
+[evidência C16-R12.203R5](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6388195740)
+comprovou `c16r5_20261020 → f2p4_20261022`, `ALEMBIC=f2p4_20261022`,
+**22 tabelas** e `POSTCHECK=PASS`; conferências posteriores READ ONLY
+reconfirmaram revisão, tabelas e ausência de índices/constraints inválidos.
+As 49 linhas do adendo C235 anterior permanecem preservadas literalmente
+para auditoria: o registro original daquela data não deve ser usado
+para sustentar a conclusão falsa de que F2P4 não estava aplicada.
+
+**Diferenças de escopo:** dizer que a criação do documento C235 não executou
+novo SQL ou migration continua válido; isso não altera o estado anterior
+já migrado. A `main` atual contém `downgrade(): raise
+RuntimeError("F2P4_DOWNGRADE_NOT_AUTHORIZED")`, bloqueando downgrade
+destrutivo; não há autorização implícita para downgrade ou restauração.
+
+**Backups e limites da prova:** C205 produziu AGE PostgreSQL após F2P4
+(`FRcaixinha_2_2_C16_R12_205_PG18_f2p4_1685d987_20261024_160549.dump.age`,
+**95.606 bytes**, SHA-256
+`a10fb867ef77d2a13994cb3e2c253003ced814b28f35026a42c58e78fee17337`).
+AGE/TOC/leitura de conteúdo, upload privado e SHA/`cmp` remoto = PASS.
+**Restauração funcional específica do backup C205 = NOT_RUN**; C122R1 e C136
+restauraram outros backups na revisão C16R5, sem equivalência funcional.
+
+**Estado Git posterior ao C235:** PR #55 integrada em
+`98526e2ae96bc270c4b45c026354c342cabeb966`, com 508/508 testes
+backend offline históricos e backup Git C234 verificado. A
+[PR #48](https://github.com/fronassor-art/FRcaixinha-2.2/pull/48)
+e a [PR #54](https://github.com/fronassor-art/FRcaixinha-2.2/pull/54)
+foram integradas documentalmente sob G2 próprias, com sincronização Termux
+e backups Git+R22 AGE locais/remotos recuperáveis; última `main`
+confirmada `8169007970c92c69badb175a0c276f0c3485ef81`.
+Nenhuma dessas integrações comprova testes transacionais físicos.
+
+**Classificação de gates não alterada:** Fase 2 permanece em andamento;
+Fases 3–7 não concluídas. As classificações F2-01…F2-13 e IN-01…IN-08
+devem ser interpretadas por escopo: PASS OFFLINE não equivale a PASS SQL
+concorrente. IN-05 triggers NÃO instalados; concorrência de 2+ sessões,
+atomicidade/idempotência/revogação/rollback real, retenção, contestação e
+decisões jurídico-operacionais IN-06/IN-08 continuam PENDENTES/BLOCKED.
+Nenhuma ativação de login, cadastro, e-mail real, Pix ou finanças.
+
+**Governança da PR #56:** esta errata altera somente os dois documentos da
+branch C235, preservando integralmente as seções históricas. PR permanece
+OPEN/DRAFT até revisão independente do SHA novo; merge, Termux e backup
+pós-merge exigem nova G2. C236 R14, quatro untracked R22 e o writer
+desabilitado permanecem preservados; nenhuma migração/DDL/DML ou modificação
+do banco é autorizada por este adendo.
