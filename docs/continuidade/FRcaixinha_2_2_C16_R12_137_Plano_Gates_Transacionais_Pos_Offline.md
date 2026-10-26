@@ -63,3 +63,41 @@ Enquanto alguma decisão bloquear o comportamento seguro, a implementação afet
 ## 6. Evidências e decisão sobre esta PR
 
 Este documento não modifica `backend/app`, `backend/migrations`, `backend/tests`, workflows, dependências, banco ou backups. Branch e PR DRAFT são preparação para revisão. **Concluir este documento não equivale a concluir a tarefa transacional.** Mudanças de regra e cada gate de risco seguem sujeitos às aprovações especificadas.
+
+## 7. Adendo cronológico de reconciliação — 26/10/2026 (revisão documental da PR #54)
+
+**Natureza e precedência temporal.** As seções 1–6 acima, datadas de 23/10/2026, foram preservadas literalmente como **fotografia histórica** do momento da proposta. Este adendo registra fatos comprovados depois daquela data. Expressões originais como `F2P4 não aplicada`, `NOT_RUN`, `NÃO AUTORIZADO` e `base main@751da8f8...` continuam corretas **somente em seus contextos históricos**; não descrevem integralmente o estado de 26/10/2026. O adendo não substitui o Contrato Técnico Mestre, não amplia nenhuma G2 e **não autoriza** DDL/DML, novo cluster/banco, testes físicos, login, Pix, operações financeiras ou merge.
+
+### 7.1. Fatos posteriores, com evidência e limites
+
+1. **Preparação offline IN-01…IN-08:** as PRs #49–#52 já integravam a base descrita em 23/10, com referência histórica a 339/339 testes naquele snapshot. Posteriormente, a [PR #55](https://github.com/fronassor-art/FRcaixinha-2.2/pull/55) foi integrada em `main@98526e2ae96bc270c4b45c026354c342cabeb966` (25/10/2026). O pacote alcançou **508/508 testes backend offline PASS** na suíte histórica da integração, com [job unittest e passos de dependências/testes SUCCESS](https://github.com/fronassor-art/FRcaixinha-2.2/actions/runs/40161734178). Esses resultados não testam concorrência PostgreSQL, locks, sessões simultâneas, triggers nem políticas jurídicas reais. Não repetir ou recontar como trabalho novo.
+2. **Migration F2P4 no único PostgreSQL autoritativo:** C16-R12.203R5 executou, mediante G2 própria, Alembic `c16r5_20261020 → f2p4_20261022` no banco `frcaixinha_2_2_dev`, PostgreSQL 18.2. [Evidência de execução e pós-verificação](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6388195740) confirmou a revisão `f2p4_20261022`, **22 tabelas**, quatro tabelas novas, coluna e constraints previstas. Nova conferência READ ONLY no Termux em 25–26/10 confirmou 22 tabelas e **nenhum índice inválido nem constraint não validada**; `ROLLBACK` e desligamento controlado `shut down`. **Não executar novo upgrade, downgrade ou stamp.**
+3. **Downgrade destrutivo IN-07:** o código de migration integrado na `main` contém `downgrade(): raise RuntimeError("F2P4_DOWNGRADE_NOT_AUTHORIZED")`. Isso corrige o perigo de quatro `DROP TABLE` presente na minuta histórica, **mas não cria procedimento autorizado de reversão/recuperação operacional**. A decisão de rollback/recuperação permanece restrita a plano e G2 próprios.
+4. **Backup e recuperação:** restaurações reais C16-R12.122R1 (AGE C119) e C16-R12.136 (AGE C132), em cluster PG18 efêmero isolado, foram `PASS` no escopo de 18 tabelas (`alembic_version` + 17 tabelas de negócio vazias). C16-R12.205 produziu backup PostgreSQL **pós-F2P4** `FRcaixinha_2_2_C16_R12_205_PG18_f2p4_1685d987_20261024_160549.dump.age`, **95.606 bytes**, SHA-256 `a10fb867ef77d2a13994cb3e2c253003ced814b28f35026a42c58e78fee17337`, com AGE/TOC/conteúdo legíveis, cópia externa privada e readback SHA/`cmp` PASS, conforme [registro de reconciliação](https://github.com/fronassor-art/FRcaixinha-2.2/pull/55#issuecomment-6388534595). **Restauração funcional específica do C205 = NOT_RUN**; testes dos backups antigos não se transferem automaticamente a este.
+5. **Git e preservação recente:** a [PR #48](https://github.com/fronassor-art/FRcaixinha-2.2/pull/48) foi revisada, integrada por squash e encerrada integralmente na `main@6990642ab8b337a9b234c2576309bed503f31171`. O Termux sincronizou `main` e `origin/main`, mantendo C236-R14 e quatro arquivos R22 intactos, `git fsck` PASS. Um backup Git+R22 AGE recuperável foi comprovado local e remotamente no Drive privado, [checkpoint de conclusão](https://github.com/fronassor-art/FRcaixinha-2.2/pull/48#issuecomment-6407683959). **Isto não é backup final de uma implementação física transacional ainda não realizada.**
+6. **Diretrizes IN-06/IN-08:** a [G2 C16-R12.172](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6378494008) aprovou **desenho e preparação de testes offline** (incluindo distinção TTL versus retenção física), não prova final de titularidade/representação, prazos físicos de expurgo, base legal operacional, rotinas de limpeza ou tratamento de disputas. Esses itens continuam pendentes de decisões separadas.
+7. **IN-05 e ensaios reais:** os triggers PostgreSQL adicionais **não foram instalados**. As provas físicas com duas conexões, atomicidade real, conflitos concorrentes, revogação, idempotência sob corrida e limpeza concorrente **continuam NOT_RUN/BLOCKED**. A execução de F2P4 estrutural não os conclui.
+
+### 7.2. Reconciliação de A–H sem transformar progresso offline em conclusão física
+
+| Portão original | Prova posterior verificada | Status por escopo em 26/10/2026 |
+| --- | --- | --- |
+| **A — levantamento e contrato** | Inventário IN-01…IN-08 e critérios originais documentados; esta reconciliação incorpora fatos novos | **DOCUMENTADO**, decisões operacionais e jurídicas ainda pendentes |
+| **B — desenvolvimento offline** | Pacote preparatório IN-01…IN-08 da PR #55 integrado | **PASS APENAS PREPARAÇÃO OFFLINE**; adaptadores transacionais PostgreSQL reais/novas DDL não comprovados |
+| **C — testes offline completos** | Suíte backend histórica 508/508 PASS após #55, com CI específica | **PASS OFFLINE NO SHA HISTÓRICO**; testes físicos de concorrência NOT_RUN |
+| **D — validação independente** | Pareceres e CI do pacote offline já registrados; este novo documento ainda precisa de revisão própria | **PARCIAL POR ESCOPO**; `PR54_REVISAO_ADENDO=NOT_RUN` |
+| **E — aprovação de integração** | G2 separadas foram concedidas para a PR #55, F2P4 e PR #48 | **PR54_MERGE=SEM_AUTORIZAÇÃO**; aprovações históricas não se estendem a esta PR |
+| **F — integração remoto/Termux** | PRs #55/#48 integradas; último `main` Termux/GitHub `6990642ab8...` sincronizado e íntegro | **PASS PARA INTEGRAÇÕES HISTÓRICAS**; PR #54 ainda Draft/não integrada |
+| **G — testes PG isolados** | Restores de backups antigos e pós-DDL READ ONLY, ambos em escopos distintos | **NOT_RUN/BLOCKED PARA TESTES FÍSICOS TRANSACIONAIS** |
+| **H — backups consolidados** | AGE PostgreSQL pós-F2P4 C205 e Git+R22 pós-PR48 com cópia remota verificável | **PASS PARA BACKUPS CITADOS**; não é encerramento/backup final de testes físicos futuros |
+
+**Regra de parada:** todo FAIL/BLOCKED de um gate técnico afetado continua impedindo a etapa operacional dependente. Não renomear evidência offline como teste PostgreSQL real nem declarar G3-C.5/G3-D/E operacionais.
+
+### 7.3. Condição de integração original e decisão ainda reservada ao Master
+
+A seção 2 e a descrição originais da PR #54 condicionam o merge à aprovação de testes da implementação transacional futura. **Esta condição histórica não foi silenciosamente revogada.** Ela deve ser tratada expressamente em decisão posterior e separada do Administrador Master, com duas alternativas a avaliar:
+
+- **Conservar a condição original:** manter a PR #54 Draft/BLOCKED até os testes físicos, decisões de segurança e revisão necessários; não declarar o documento encerrado.
+- **Autorizar expressamente a integração exclusiva do plano documental atualizado:** reconhecer que o documento funciona como planejamento, com **todos os gates físicos e jurídicos ainda em aberto** e rastreados; somente após revisão independente do adendo e G2 específica, sem tratar a integração documental como aceite da implementação.
+
+A presente G2 autorizou **somente acrescentar este adendo na branch da PR #54**. Não escolheu nenhuma das alternativas de merge, não aprovou testes SQL e não liberou PR #56/C236. A PR #54 permanece **DRAFT / MERGE BLOCKED** até avaliação independente deste novo HEAD e nova decisão explícita.
