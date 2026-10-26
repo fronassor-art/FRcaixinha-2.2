@@ -15,7 +15,7 @@
 
 | Situação | Fontes de evidência candidatas — NÃO homologadas | Medida segura hoje | Decisão pendente |
 | --- | --- | --- | --- |
-| PF1 — cadastro preliminar sem conflito | Campos previstos no contrato, validação formal CPF e confirmação de contato, quando aplicável | Cadastro segue pendente, sem prova civil presumida nem acesso financeiro | Provas mínimas por natureza de ato |
+| PF1 — cadastro preliminar sem conflito | Campos previstos no contrato e validação formal do CPF; para administrador PF e membro, e-mail válido e confirmado e telefone com DDD válido são obrigatórios. Confirmar a posse do telefone quando usado para autenticação, recuperação ou ato sensível | Cadastro segue pendente, sem presumir identidade civil pela confirmação do e-mail ou telefone nem conceder acesso financeiro | Provas adicionais por natureza e risco do ato |
 | PF2 — acesso ordinário já autenticado sem disputa | Sujeito/sessão do verificador confiável, contexto de papel já permitido | Somente privilégios previamente aprovados; nunca tomar outra conta | Critério de reautenticação por risco |
 | PF3 — CPF/e-mail reservado, alegação de cadastro indevido | Documento oficial conferido por canal legitimamente aprovado, fontes independentes ou meios equivalentes a determinar | Protocolo conceitual em análise; sem remover a reserva ou criar identidade duplicada | Método de autenticidade e suficiência |
 | PF4 — invasão, contato perdido ou alterado, disputa de alta criticidade | Evidência independente do canal comprometido; revisor competente e fundamentação | Sem reset, mudança de titularidade ou acesso automático | Revisor, evidência adicional e medidas provisórias |
@@ -39,7 +39,7 @@
 
 **Estados conceituais ilustrativos — NÃO enum de banco:** RECEBIDA → TRIAGEM → (AGUARDANDO_EVIDENCIA | EM_ANALISE) → (DEFERIDA | INDEFERIDA | ESCALADA). Bloqueio por risco é controle excepcional a regulamentar, **não** sentença jurídica, permissão automática de congelamento financeiro, revogação real ou descarte de histórico.
 **Princípio de decisão:** a parte interessada não revisa o próprio caso. Administrador diretamente interessado na reserva, conta ou tenant não presume poder de adjudicar titularidade global. O Master não recebe acesso arbitrário a extratos de terceiros nem poder de liberar Pix. **Revisor efetivo, seu substituto, autoridade de recurso, conflito de interesses e esfera de competência ainda NÃO FORAM DESIGNADOS**; não inventar papel `REVIEWER`, grant ou cadastro para preencher o vazio.
-**Prova e protocolo conceitual:** case_ref, requerente apenas após autenticação por serviço confiável, classe do pedido, versão de política, referências opacas a evidências, origem/autenticidade de prova, cronologia, atos e impedimentos, decisão motivada, identidade do revisor competente, recurso e histórico imutável. Nenhuma prova de terceiro divulgada ao reclamante. Sem CPF, senha, e-mail integral, documentos ou tokens em logs.
+**Entrada, prova e decisão — protocolo apenas conceitual:** (1) admitir o recebimento neutro de uma alegação mesmo de quem perdeu acesso, sem confirmar a existência de conta, revelar dados ou conceder privilégio; (2) antes de tratar o requerente como titular ou representante, exigir identificação ou autenticação verificável por método aprovado e independente de canal alegadamente comprometido; (3) conferir origem, autenticidade, suficiência e contradições das evidências, com referências opacas, cronologia, versão da política e impedimentos; (4) submeter decisão motivada e eventual recurso à autoridade competente ainda a designar, vedada autoaprovação; (5) deixar qualquer efeito operacional para fluxo futuro, aprovado e testado sob G2 própria. O registro conceitual pode conter case_ref sem enumerar contas; não divulgar provas de terceiros nem registrar CPF, senha, e-mail integral, documentos ou tokens em logs.
 **Preservação:** até decisão validamente autorizada, manter titularidade/vínculos/histórico e contas intactos; não liberar nem tomar identidades reservadas por mera presunção de abandono, não enfraquecer índices UNIQUE e não compartilhar dados de reclamantes.
 
 ## 5. IN06-R2-D — limites de recuperação (PROPOSTA)
@@ -59,7 +59,8 @@
 | Revisor e instância de recurso | SEM TITULAR DESIGNADO | Competência, independência e impedimento formalmente aprovados |
 | Reserva global indevida/abandonada | BLOCKED | Política antifraude, preservação e fundamento jurídico antes de exclusão/reuso |
 | Recuperação operacional/sessões | NOT_RUN | G2 código, G2 PG físico e IN-05 transacional |
-| Coleta, controlador, base legal, guarda e descarte | PENDENTE IN-08 | Parecer datado/competente, LGPD e aprovação específica; sem prazo presumido |
+| IN06 antes de operacionalizar: controlador, finalidade, base legal, segurança, acesso às evidências e atendimento aos direitos dos titulares | PENDENTE DE DECISÃO E VALIDAÇÃO JURÍDICA | Definição documentada pelo Master, competência de acesso e parecer aplicável antes de coleta ou análise operacional; minimizar dados e preservar isolamento tenant/ciclo |
+| IN08: retenção, conservação, descarte e exclusão das evidências | PENDENTE IN-08 | Política específica por finalidade e base legal, validação jurídica e G2 própria; sem inventar prazo nem equiparar TTL de token a retenção |
 | Gov.br, consulta oficial automatizada, biometria, SMS | NÃO INTEGRADOS | Provedor, segurança, custo e aprovação separados |
 
 Referências externas oficiais para análise, **não parecer jurídico**: [LGPD compilada](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709compilado.htm) (finalidade/minimização/direitos e segurança), [ANPD — direitos dos titulares](https://www.gov.br/anpd/pt-br/assuntos/titular-de-dados-1/direito-dos-titulares), [Consulta pública CNPJ](https://www.gov.br/pt-br/servicos/consultar-cadastro-nacional-de-pessoas-juridicas). O controlador, responsabilidade de revisão e enquadramento concreto ainda precisam ser definidos.
@@ -83,7 +84,7 @@ Referências externas oficiais para análise, **não parecer jurídico**: [LGPD 
 | R2-PG01 | Duas transações, SAVEPOINT, locks, rollback, invalidação | **BLOCKED** até autorização G2 PG/IN-05 real |
 | R2-LAW01 | Parecer para PF/PJ, revisor, privacidade e retenção | **PENDENTE**; sem declarar homologação jurídica |
 
-Testes precisam usar dados fictícios e ferramentas já existentes, não relaxar proteção para obter PASS. Nenhum teste novo ou CI foi executado por este documento.
+Testes futuros precisam usar dados fictícios e ferramentas já existentes, sem relaxar proteção para obter PASS. O check documental de metadados `signal` registrou `SUCCESS` no head inicial `5adc55e2bae58ce453ca51ec5c3f0eedb1410c8e`; cada novo head requer verificação própria. Esse check não é teste funcional. Testes backend novos da IN06-R2: `NOT_RUN`. Os 14 cenários prospectivos desta seção: `NOT_RUN`. PostgreSQL nesta revisão: `NOT_ACCESSED`.
 
 ## 8. Próximo portão e proteção do projeto
 
