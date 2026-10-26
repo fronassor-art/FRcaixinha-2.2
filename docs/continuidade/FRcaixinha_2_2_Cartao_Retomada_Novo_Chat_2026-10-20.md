@@ -303,3 +303,25 @@ Esta seção é um **checkpoint posterior**; os registros anteriores sobre PR #5
 - **Fases:** Fase 2 continua em andamento; esta PR não conclui critérios físicos PostgreSQL, IN-05, IN-06/IN-08 ou Fases 3–7. Contrato Técnico Mestre e regras financeiras inalterados.
 
 **Natureza:** adendo factual de continuidade da própria C236, não uma regra nova ou autorização operacional.
+
+## Retomada IN06-R1 — PR #61 integrada, documentação em curso (26/10/2026)
+
+Este checkpoint é posterior aos registros acima; as fotografias históricas
+permanecem preservadas. A [PR #61](https://github.com/fronassor-art/FRcaixinha-2.2/pull/61)
+foi integrada por squash, com `main` verificada em
+`68e237dca31f7781b7db4ec104510945a743b464` antes desta PR documental.
+
+- Dois arquivos integrados: `backend/app/in06_claim_review_offline.py` e
+  `backend/tests/test_in06_claim_review_offline.py`. São preparação de
+  contestação PF/PJ **somente offline**, sem prova de titularidade ou poderes,
+  julgamento, recuperação operacional ou concessão de acesso financeiro.
+- [Backend CI #40384753272](https://github.com/fronassor-art/FRcaixinha-2.2/actions/runs/40384753272):
+  `520/520 PASS` e `pip check PASS`; [reauditoria independente PASS offline](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6424733866);
+  [sincronização Termux PASS por fast-forward](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6425359706).
+- PostgreSQL `frcaixinha_2_2_dev` não acessado nesta atualização documental;
+  sem SQL ou migration. IN06 integral continua em andamento; componentes
+  operacionais exigem G2 específicas. IN08 não iniciada.
+- Backup final AGE da IN06-R1 **PENDENTE/NOT_RUN** até documentação versionada
+  e SHA estável, com recuperação e cópia privada/readback comprovados.
+  Preservar backup anterior da PR #60. Nenhum merge documental decorre
+  automaticamente deste checkpoint.

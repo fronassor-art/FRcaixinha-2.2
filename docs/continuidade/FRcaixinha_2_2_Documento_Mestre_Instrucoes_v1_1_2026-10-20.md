@@ -733,3 +733,30 @@ Esta seção é um **checkpoint posterior**; os registros anteriores sobre PR #5
 - **Fases:** Fase 2 continua em andamento; esta PR não conclui critérios físicos PostgreSQL, IN-05, IN-06/IN-08 ou Fases 3–7. Contrato Técnico Mestre e regras financeiras inalterados.
 
 **Natureza:** adendo factual de continuidade da própria C236, não uma regra nova ou autorização operacional.
+
+## Checkpoint IN06-R1 — preparação offline de contestação integrada (26/10/2026)
+
+Este checkpoint é posterior aos registros acima e preserva seu contexto
+histórico. A [PR #61](https://github.com/fronassor-art/FRcaixinha-2.2/pull/61)
+foi integrada por squash na `main`
+`68e237dca31f7781b7db4ec104510945a743b464`, verificada antes desta
+atualização documental.
+
+- **Escopo:** somente `backend/app/in06_claim_review_offline.py` e
+  `backend/tests/test_in06_claim_review_offline.py`. A preparação de intenção
+  de contestação PF/PJ é exclusivamente offline. Referências opacas e o estado
+  `PREPARED_OFFLINE_UNREVIEWED` não comprovam titularidade, poderes de
+  representação ou suficiência jurídica, nem aprovam disputa, recuperam conta
+  ou concedem acesso, papéis, tenant, licença ou recurso financeiro.
+- **Provas:** [Backend CI #40384753272](https://github.com/fronassor-art/FRcaixinha-2.2/actions/runs/40384753272)
+  `520/520 PASS` e `pip check PASS` no HEAD aprovado da PR; reauditoria
+  independente [PASS no escopo offline](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6424733866);
+  [sincronização Termux por fast-forward PASS](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6425359706).
+  Essas provas não equivalem à validação operacional ou transacional PostgreSQL.
+- **Limites:** PostgreSQL `frcaixinha_2_2_dev` não foi acessado nesta atualização
+  documental; sem SQL ou migration. A IN06 integral continua em andamento,
+  e componentes operacionais exigem autorizações específicas. IN08 não foi
+  iniciada. Contrato Técnico Mestre e regras financeiras permanecem inalterados.
+- **Backup final:** AGE da IN06-R1 após documentação versionada e SHA estável
+  permanece `PENDENTE/NOT_RUN`; recuperação, cópia privada e readback ainda
+  precisam de prova. O backup anterior da PR #60 permanece preservado.
