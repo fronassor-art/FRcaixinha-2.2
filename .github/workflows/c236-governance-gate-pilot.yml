@@ -1,0 +1,38 @@
+name: C236 governance gate pilot
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [main]
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: c236-governance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  c236-r17-governance-current-evidence:
+    name: c236-r17-governance-current-evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 36
+    steps:
+      - name: Checkout trusted main only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Verify current technical evidence without PR code
+        run: python -B .github/scripts/c236_governance_gate.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
