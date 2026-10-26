@@ -89,3 +89,39 @@ Esses hashes referem-se ao momento do backup, não a estados futuros. O ensaio G
 - Plano G3-C original aprovado na PR #47: `docs/continuidade/FRcaixinha_2_2_G3C_R12_111_Plano_Integridade_Retencao_Recuperacao_PostgreSQL.md`.
 
 **Status ao redigir:** `G3-C.3-PLANO_DOCUMENTAL=EM_REVISAO`; `RESTORE_FUNCTIONAL=NOT_RUN`; `G3-C.4_OFFLINE=PODE_PLANEJAR`; `G3-C.5=NAO_AUTORIZADO`.
+
+---
+
+## 7. Adendo cronológico de reconciliação — 26/10/2026 (C236; revisão documental da PR #48)
+
+**Natureza deste adendo:** atualização temporal posterior à proposta original de 22/10/2026. Os itens 1 a 6 acima ficam **integralmente preservados como fotografia do momento em que foram escritos**. Expressões como \`RESTORE_FUNCTIONAL=NOT_RUN\`, \`F2P4 não aplicada\` e \`NÃO AUTORIZADA\` na fotografia original não constituem o estado vigente e não devem ser reutilizadas sem data e contexto. Este adendo **não autoriza** recuperação, escrita SQL, migration, operação financeira, publicação de API ou merge.
+
+### 7.1. Restaurações funcionais posteriores ao documento original
+
+- **C16-R12.122R1 — 23/10/2026: \`FUNCTIONAL_RESTORE=PASS\` do backup AGE C119.** A restauração foi realmente executada em cluster PostgreSQL 18 **efêmero e isolado**, com socket privado, TCP desabilitado, inventário da revisão \`c16r5_20261020\`, **18 tabelas**, índices e constraints válidos, paridade de contagens das 18 tabelas em relação à base autoritativa, descarte e conferência posterior da base principal, sem escrita nela. A tabela Alembic continha 1 linha; as 17 tabelas de negócio continham 0 linhas. A prova **não** demonstra recuperação de informações financeiras populadas nem RPO/RTO real. [Registro probatório C122R1](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6362432633).
+- **C16-R12.136 — 23/10/2026: \`FUNCTIONAL_RESTORE=PASS\` do backup AGE C132.** Segundo restore efetivo em cluster PG18 efêmero isolado, revisão \`c16r5_20261020\`, 18 tabelas (17 de negócio vazias), conferência de índices, constraints, isolamento, descarte e base principal pós-ensaio. O backup C132 testado tinha SHA-256 \`0b64d0009bc7a5e5e32c36a94d5a22e85fe20e224eba20496b2aa0143295ed8f\`. Também **não** demonstra recuperação de dados financeiros populados, testes de concorrência ou cumprimento de RPO/RTO. [Registro probatório C136](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6364733470).
+- **C16-R12.166/C167:** reconciliações posteriores reconheceram expressamente essas provas e impediram reclassificar os restores concluídos como \`NOT_RUN\`. [C166](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6377345192) · [C167](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6377564303).
+
+**Alcance do PASS:** refere-se somente à restauração comprovada dos backups C119 e C132 nas condições documentadas. Não se estende automaticamente ao backup posterior C205, à recuperação de dados financeiros reais, às operações dos novos adaptadores ou às provas físicas de concorrência PostgreSQL.
+
+### 7.2. Migration posterior, backup e conferência do banco original
+
+- **C16-R12.203R5 — 24/10/2026:** após autorização G2 específica e preflight, foi aplicada efetivamente a migration Alembic \`c16r5_20261020 → f2p4_20261022\` no **único banco autoritativo** \`frcaixinha_2_2_dev\` (PostgreSQL 18). Pós-verificação: revisão \`f2p4_20261022\`, **22 tabelas** e índices/constraints esperados verificados, \`PASS\`. [C203R5](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6388195740).
+- **C16-R12.204:** regressão **offline** 465/465 PASS e consulta PostgreSQL READ ONLY de revisão, 22 tabelas e integridade estrutural, PASS. Não equivale a ensaio físico de idempotência, locks ou concorrência. [C204](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6388259912).
+- **C16-R12.205/C206:** produzido backup pós-F2P4 \`FRcaixinha_2_2_C16_R12_205_PG18_f2p4_1685d987_20261024_160549.dump.age\` (95.606 bytes, SHA-256 \`a10fb867ef77d2a13994cb3e2c253003ced814b28f35026a42c58e78fee17337\`). Verificações AGE/TOC/conteúdo offline e cópia privada Google Drive com conferência remota foram registradas como PASS. **Restore funcional específico do backup C205 = NOT_RUN**, não confundir com C122R1/C136. [C205](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46#issuecomment-6388394790) · [C206 / consolidação pós-F2P4](https://github.com/fronassor-art/FRcaixinha-2.2/pull/55#issuecomment-6388534595).
+- **Conferência de continuidade fornecida pelo Administrador Master em 25–26/10/2026:** o cluster original em \`$PREFIX/var/lib/frcaixinha_2_2_pg18\` foi iniciado de modo controlado após uma interrupção anterior; uma transação \`REPEATABLE READ READ ONLY\` confirmou **PostgreSQL 18.2**, banco \`frcaixinha_2_2_dev\`, \`alembic_version=f2p4_20261022\`, **22 tabelas**, **0 índices inválidos** e **0 constraints não validadas**, com \`ROLLBACK\` e \`conferencia_f2p4=PASS\`. O servidor foi depois desligado normalmente (\`Database cluster state: shut down\`). Não houve execução de migration, restauração ou criação de cluster nesta conferência. As saídas foram fornecidas pelo operador; o redator não executou os comandos no aparelho. [Checkpoint vigente da Issue #46](https://github.com/fronassor-art/FRcaixinha-2.2/issues/46).
+
+### 7.3. Estado vigente e portões preservados
+
+| Controle | Classificação após reconciliação |
+| --- | --- |
+| Restauração funcional AGE C119 e C132, no escopo ensaiado | **PASS HISTÓRICO** — C122R1/C136 |
+| Banco autoritativo PostgreSQL / Alembic F2P4 | **APLICADA e RECONFIRMADA**; não reaplicar nem executar downgrade |
+| Backup AGE pós-F2P4 C205, legibilidade e cópia externa | **PASS HISTÓRICO**; restore funcional específico **NOT_RUN** |
+| Concorrência de duas conexões, locks, idempotência, revogação e rollback reais | **NOT_RUN / PENDENTE**, não inferir dos testes offline |
+| Triggers adicionais IN-05 | **NÃO INSTALADOS** |
+| IN-06/IN-08 | Desenhos parcialmente aprovados; decisões e validações operacionais **PENDENTES** |
+| G3-C.3 — procedimento documental desta PR #48 | **AGUARDANDO REVISÃO INDEPENDENTE E DECISÃO EXPRESSA DO MASTER** |
+| API operacional, e-mail, login, Pix e movimentação financeira | **NÃO AUTORIZADOS** |
+
+**Encerramento desta revisão documental:** o procedimento de contingência original permanece uma referência de planejamento, não um roteiro operacional liberado. O adendo elimina a contradição entre sua fotografia inicial e os fatos posteriores **sem reescrever a história**. A PR #48 permanece Draft; somente após auditoria documental independente e autorização expressa poderão ser decididos o merge ou o encerramento justificado. A regularização da PR #48 deve ser concluída antes de avançar à #54 e à #56, conforme a fila bloqueante do Administrador Master.
