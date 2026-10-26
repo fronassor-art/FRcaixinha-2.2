@@ -1,9 +1,7 @@
 name: C236 governance gate pilot
 
 on:
-  pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   actions: read
@@ -11,12 +9,10 @@ permissions:
   contents: read
   pull-requests: read
 
-concurrency:
-  group: c236-governance-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   c236-r17-governance-current-evidence:
+    # Dormant pilot: explicit future G2 needed before any execution.
+    if: ${{ false }}
     name: c236-r17-governance-current-evidence
     runs-on: ubuntu-24.04
     timeout-minutes: 36
