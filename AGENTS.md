@@ -137,7 +137,7 @@ Exemplo puramente READ ONLY de validação do contexto (não serve como autoriza
 7. **Gate de saída:** somente com todas as evidências e confirmações de GitHub, declarar `ENCERRAMENTO_INTEGRAL=PASS` para o escopo exato. Se o conector GitHub ou aprovação de mudança canônica faltar, registrar a limitação e manter `BLOCKED/PENDENTE` no aspecto afetado; não abrir a etapa dependente.
 8. **Protocolo novo chat:** reler este padrão e Issue #46 ANTES de qualquer prompt, validar `main`/branch e conferir adendos históricos. Não confiar exclusivamente na memória do modelo; a fonte versionada e a Issue são as referências.
 
-## E. Fontes normativas
+## D. Fontes normativas
 
 - Contrato Técnico Mestre FINAL_APROVADO (16/10/2026), cláusulas 1.8, 15 e 16.
 - Documento Mestre v1.1 (20/10/2026), seções 5–7, 15–17, Anexo I, ADR/ERR.
@@ -147,7 +147,7 @@ Exemplo puramente READ ONLY de validação do contexto (não serve como autoriza
 
 **Importante:** esta edição documenta o pedido de governança do Administrador Master de 26/10/2026. Não é licença automática para editar contratos, abrir PR, executar migration ou publicar código. Qualquer versão que for integrada no Git será sujeita à G2/PR e aos testes de escopo próprios.
 
-## F. Verificação antes de considerar esta política efetivamente instalada
+## E. Verificação antes de considerar esta política efetivamente instalada
 
 Após PR documental, revisão independente e merge autorizados, conferir o SHA da `main`, sincronizar o único checkout local preservando alterações existentes e confirmar em **nova sessão do Codex** que `AGENTS.md` foi localizado/lido. A mera presença em uma branch de PR **não prova** instalação nem carregamento pelo executor local. O fechamento requer checkpoint GitHub e backup verificável quando a etapa estável exigir.
 
