@@ -16,7 +16,7 @@ from time import monotonic
 from typing import Final
 from uuid import UUID, uuid4
 
-from app.identity_draft import PersonDraft, prepare_person_draft
+from app.identity_draft import IdentityDraftError, PersonDraft, prepare_person_draft
 
 
 class PreRegistrationError(ValueError):
@@ -140,7 +140,12 @@ class PfPreRegistrationService:
                 or not 1 <= len(idempotency_key) <= _MAX_IDEMPOTENCY_KEY
                 or any(ord(char) < 0x21 or ord(char) > 0x7E for char in idempotency_key)):
             raise PreRegistrationError("IDEMPOTENCY_KEY_INVALID")
-        person = prepare_person_draft(name=name, cpf=cpf, email=email, phone=phone)
+        try:
+            person = prepare_person_draft(name=name, cpf=cpf, email=email, phone=phone)
+        except IdentityDraftError:
+            raise
+        except Exception:
+            raise PreRegistrationError("PRE_REGISTRATION_UNAVAILABLE") from None
         try:
             token = secrets.token_urlsafe(24)
             record = _Record(
@@ -195,6 +200,33 @@ class PfPreRegistrationService:
                 )
                 self._store.replace(confirmed)
                 return self._receipt(confirmed)
+        except PreRegistrationError:
+            raise
+        except Exception:
+            raise PreRegistrationError("PRE_REGISTRATION_UNAVAILABLE") from None
+
+    def revoke_contact_token(self, *, request_ref: object, token: object) -> None:
+        """Revoga um desafio simulado mediante o segredo ainda válido.
+
+        Não é rota HTTP e não concede confirmação ou acesso. A referência
+        isolada nunca autoriza a transição.
+        """
+        if (type(request_ref) is not UUID or type(token) is not str
+                or not 1 <= len(token) <= 256 or not token.isascii()):
+            raise PreRegistrationError("CONTACT_CONFIRMATION_INVALID")
+        try:
+            with self._store.locked():
+                record = self._store.by_ref(request_ref)
+                if (record is None or record.state is not PreRegistrationState.PRELIMINARY
+                        or record.token_revoked or monotonic() >= record.token_expires_at
+                        or not secrets.compare_digest(
+                            record.confirmation_token_digest, _digest(token),
+                        )):
+                    raise PreRegistrationError("CONTACT_CONFIRMATION_INVALID")
+                self._store.replace(dataclass_replace(
+                    record, token_revoked=True, confirmation_token_digest="",
+                    audit_events=record.audit_events + ("CONTACT_CONFIRMATION_REVOKED",),
+                ))
         except PreRegistrationError:
             raise
         except Exception:

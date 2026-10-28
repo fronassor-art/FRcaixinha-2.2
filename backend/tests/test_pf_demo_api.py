@@ -232,6 +232,15 @@ class PfDemoApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(secret, response.text)
         self.assertEqual(len(self.store._by_ref), 0)
 
+    async def test_unexpected_validator_failure_returns_generic_http_error(self) -> None:
+        with patch("app.pf_preregistration.prepare_person_draft",
+                   side_effect=RuntimeError(VALID["cpf"])):
+            response = await self._submit("validator-http-fault")
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"detail": "DEMO_REQUEST_REJECTED"})
+        self.assertNotIn(VALID["cpf"], response.text)
+        self.assertEqual(len(self.store._by_ref), 0)
+
     async def test_missing_or_invalid_idempotency_key_is_rejected(self) -> None:
         service = PfPreRegistrationService(TransientPreRegistrationStore())
         with self.assertRaisesRegex(PreRegistrationError, "^IDEMPOTENCY_KEY_MISSING$"):
@@ -262,6 +271,17 @@ class PfDemoApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(schema["paths"]), {_PATH})
         self.assertIn("202", schema["paths"][_PATH]["post"]["responses"])
         self.assertNotIn("confirm-contact", str(schema))
+
+
+    async def test_public_revocation_route_is_absent(self) -> None:
+        created = await self._submit("no-public-revocation")
+        self._assert_neutral(created)
+        ref = next(iter(self.store._by_ref))
+        response = await self.client.post(
+            f"{_PATH}/{ref}/revoke-contact", json={"code": "synthetic-token"},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.store.by_ref(ref).state, PreRegistrationState.PRELIMINARY)
 
 
 class PfPreRegistrationServiceTests(unittest.TestCase):
@@ -421,6 +441,70 @@ class PfPreRegistrationServiceTests(unittest.TestCase):
             second_store.by_ref(second.request_ref).cpf_lookup,
         )
 
+
+
+    def test_simulated_token_revocation_requires_valid_secret(self) -> None:
+        store = TransientPreRegistrationStore()
+        service = PfPreRegistrationService(store)
+        created = service.submit(**VALID, idempotency_key="revoke")
+        with self.assertRaisesRegex(PreRegistrationError, "^CONTACT_CONFIRMATION_INVALID$"):
+            service.revoke_contact_token(request_ref=created.request_ref, token="wrong")
+        self.assertFalse(store.by_ref(created.request_ref).token_revoked)
+        service.revoke_contact_token(
+            request_ref=created.request_ref, token=created._confirmation_token,
+        )
+        record = store.by_ref(created.request_ref)
+        self.assertTrue(record.token_revoked)
+        self.assertEqual(record.confirmation_token_digest, "")
+        self.assertEqual(record.audit_events[-1], "CONTACT_CONFIRMATION_REVOKED")
+        self.assertEqual(record.state, PreRegistrationState.PRELIMINARY)
+        with self.assertRaisesRegex(PreRegistrationError, "^CONTACT_CONFIRMATION_INVALID$"):
+            service.confirm_contact(
+                request_ref=created.request_ref, token=created._confirmation_token,
+            )
+        with self.assertRaisesRegex(PreRegistrationError, "^CONTACT_CONFIRMATION_INVALID$"):
+            service.revoke_contact_token(
+                request_ref=created.request_ref, token=created._confirmation_token,
+            )
+        self.assertFalse(created.access_granted)
+        self.assertFalse(created.identity_verified)
+        self.assertFalse(created.persisted)
+
+    def test_expired_or_malformed_token_cannot_revoke(self) -> None:
+        store = TransientPreRegistrationStore()
+        service = PfPreRegistrationService(store)
+        tick = [100.0]
+        with patch("app.pf_preregistration.monotonic", side_effect=lambda: tick[0]):
+            created = service.submit(**VALID, idempotency_key="revoke-expired")
+            tick[0] = 700.0
+            with self.assertRaisesRegex(PreRegistrationError, "^CONTACT_CONFIRMATION_INVALID$"):
+                service.revoke_contact_token(
+                    request_ref=created.request_ref, token=created._confirmation_token,
+                )
+        with self.assertRaisesRegex(PreRegistrationError, "^CONTACT_CONFIRMATION_INVALID$"):
+            service.revoke_contact_token(request_ref=created.request_ref, token="é")
+        self.assertEqual(store.by_ref(created.request_ref).state, PreRegistrationState.PRELIMINARY)
+
+    def test_revocation_storage_failure_is_closed(self) -> None:
+        store = TransientPreRegistrationStore()
+        service = PfPreRegistrationService(store)
+        created = service.submit(**VALID, idempotency_key="revoke-fault")
+        with patch.object(store, "replace", side_effect=RuntimeError(VALID["cpf"])):
+            with self.assertRaisesRegex(PreRegistrationError, "^PRE_REGISTRATION_UNAVAILABLE$"):
+                service.revoke_contact_token(
+                    request_ref=created.request_ref, token=created._confirmation_token,
+                )
+        self.assertFalse(store.by_ref(created.request_ref).token_revoked)
+        self.assertEqual(store.by_ref(created.request_ref).audit_events, ("SUBMITTED",))
+
+    def test_unexpected_validator_failure_is_redacted(self) -> None:
+        store = TransientPreRegistrationStore()
+        service = PfPreRegistrationService(store)
+        with patch("app.pf_preregistration.prepare_person_draft",
+                   side_effect=RuntimeError(VALID["cpf"])):
+            with self.assertRaisesRegex(PreRegistrationError, "^PRE_REGISTRATION_UNAVAILABLE$"):
+                service.submit(**VALID, idempotency_key="validator-fault")
+        self.assertEqual(len(store._by_ref), 0)
 
 
 if __name__ == "__main__":
